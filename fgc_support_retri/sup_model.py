@@ -1,0 +1,35 @@
+from enum import Enum
+from transformers import BertModel
+import torch
+import torch.nn as nn
+
+
+class BertSupSentClassification(nn.Module):
+	class ForwardMode(Enum):
+		TRAIN = 0
+		EVAL = 1
+
+	def __init__(self, bert_encoder: BertModel):
+		super(BertSupSentClassification, self).__init__()
+		self.bert_encoder = bert_encoder
+		self.dropout = nn.Dropout(p=bert_encoder.config.hidden_dropout_prob)
+		self.classifier = nn.Linear(bert_encoder.config.hidden_size, 1)
+		self.criterion = nn.BCEWithLogitsLoss()
+
+	def forward(self, input_ids, token_type_ids=None, attention_mask=None, mode=ForwardMode.TRAIN, labels=None):
+		sequence_output, pooled_output = self.bert_encoder(input_ids, token_type_ids, attention_mask)
+		hidden = self.dropout(pooled_output)
+		logits = self.classifier(hidden)
+
+		if mode == BertSupSentClassification.ForwardMode.TRAIN:
+			loss = self.criterion(logits, labels.unsqueeze(-1).float())
+			return loss
+
+		elif mode == BertSupSentClassification.ForwardMode.EVAL:
+			return logits
+
+
+if __name__ == '__main__':
+	pass
+
+
