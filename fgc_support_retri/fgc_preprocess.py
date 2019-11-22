@@ -59,7 +59,7 @@ def item2q(items):
                     bunch[key] = value
                 item_q.append(bunch)
         except:
-            print(d['QTEXT'])
+            print(d['DID'])
     return item_q
 
 
@@ -69,19 +69,19 @@ def prepro_all(fgc_file):
 
     print('preprocessing {} ......'.format(fgc_file))
     item_q = item2q(items)
-    print('data size = '.format(len(item_q)))
+    print('data size = {}'.format(len(item_q)))
     return item_q
 
 
 def get_sentence_pair(q_bunch):
 
-    assert len(q_bunch['sents']) == len(q_bunch['label'])
+    assert len(q_bunch['SENTS']) == len(q_bunch['SUP_EVIDENCE'])
     out = []
 
     sid = 0
-    for s, label in zip(q_bunch['sents'], q_bunch['label']):
-        out.append({'DID': q_bunch['DID'], 'QID': q_bunch['QID'], 'SID': sid, 'question': q_bunch['question'],
-                    'sentence': s, 'label': np.array(label)})
+    for s, label in zip(q_bunch['SENTS'], q_bunch['SUP_EVIDENCE']):
+        out.append({'DID': q_bunch['DID'], 'QID': q_bunch['QID'], 'SID': sid, 'question': q_bunch['QTEXT'],
+                    'sentence': s[0], 'label': np.array(label)})
         sid += 1
     return out
 

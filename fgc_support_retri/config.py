@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-SRC_ROOT = Path(os.path.realpath(__file__))
+SRC_ROOT = Path(os.path.dirname(os.path.realpath(__file__)))
 PROJ_ROOT = SRC_ROOT.parent
 
 DATA_ROOT = PROJ_ROOT / "data"
