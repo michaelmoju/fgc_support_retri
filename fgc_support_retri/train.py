@@ -15,7 +15,7 @@ def train_model():
 	torch.manual_seed(12)
 	bert_model_name = 'bert-base-chinese'
 	forward_size = 128
-	batch_size = 64
+	batch_size = 32
 	gradient_accumulate_step = int(batch_size / forward_size)
 	warmup_proportion = 0.1
 	learning_rate = 5e-5
