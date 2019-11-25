@@ -7,6 +7,7 @@ from tqdm import tqdm_notebook as tqdm
 from torch.utils.data import Dataset
 from stanfordcorenlp import StanfordCoreNLP
 
+
 nlp = StanfordCoreNLP('http://140.109.19.191', port=9000, lang='zh')
 props = {'annotators': 'ssplit', 'ssplit.boundaryTokenRegex': '[。]|[!?！？]+',
          'outputFormat': 'json', 'pipelineLanguage': 'zh', 'timeout': '5000000'}
@@ -58,7 +59,8 @@ def item2q(items):
                 for key, value in q.items():
                     bunch[key] = value
                 item_q.append(bunch)
-        except:
+        except Exception as e:
+            print(e)
             print(d['DID'])
     return item_q
 
@@ -107,6 +109,35 @@ class FgcSerDataset(Dataset):
 
         return sample
 
+
+class BertIdx:
+    """ Sentence to BERT idx"""
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+
+    def __call__(self, sample):
+        input_ids = torch.zeros(512, dtype=torch.long)
+        token_type_ids = torch.zeros(512, dtype=torch.long)
+        attention_mask = torch.zeros(512, dtype=torch.long)
+
+        tokenized_q = ['[CLS]'] + self.tokenizer.tokenize(sample['question']) + ['[SEP]']
+        tokenized_all = tokenized_q + self.tokenizer.tokenize(sample['sentence'])
+        if len(tokenized_all) > 511:
+            print("tokenized all > 511 id:{}".format(sample['QID']))
+            tokenized_all = tokenized_all[:512]
+        tokenized_all += ['[SEP]']
+        ids_all = self.tokenizer.convert_tokens_to_ids(tokenized_all)
+
+        input_ids[:len(ids_all)] = torch.tensor(ids_all)
+        token_type_ids[len(tokenized_q):len(tokenized_all)] = 1
+        attention_mask[:len(tokenized_all)] = 1
+
+        sample['input_ids'] = input_ids
+        sample['token_type_ids'] = token_type_ids
+        sample['attention_mask'] = attention_mask
+        sample['label'] = torch.tensor(sample['label'], dtype=torch.long)
+
+        return sample
 
 if __name__ == '__main__':
     item_q = prepro_all(config.FGC_DEV)
