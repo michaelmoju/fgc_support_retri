@@ -56,8 +56,7 @@ def item2q(items):
             item_p = keyword2se(d)
             for q in item_p['QUESTIONS']:
                 bunch = {key: value for key, value in d.items()}
-                for key, value in q.items():
-                    bunch[key] = value
+                del bunch['QUESTIONS']
                 item_q.append(bunch)
         except Exception as e:
             print(e)
