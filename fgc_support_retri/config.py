@@ -11,3 +11,4 @@ FGC_DEV = DATA_ROOT / "FGC" / "1.2" / "FGC_release_A_dev(cn).json"
 FGC_TRAIN = DATA_ROOT / "FGC" / "1.2" / "FGC_release_A_train(cn).json"
 FGC_TEST = DATA_ROOT / "FGC" / "1.2" / "FGC_release_A_test(cn).json"
 
+HOTPOT_DEV = DATA_ROOT / "hotpot_dataset" / "FGC_hotpot_dev_distractor_v1(cn_refn).json"

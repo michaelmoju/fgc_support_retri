@@ -109,34 +109,60 @@ class FgcSerDataset(Dataset):
         return sample
 
 
+class HotpotDataset(Dataset):
+    "Supporting evidence chinese Hotpot dataset"
+
+    @staticmethod
+    def get_sentence_pair(item):
+        assert len(item['SENTS']) == len(item['SUP_EVIDENCE'])
+        sid = 0
+        for s, label in zip(item['SENTS'], item['SUP_EVIDENCE']):
+            out = {'DID': item['DID'], 'SID': sid, 'QTEXT': item['QTEXT'],
+                        'sentence': s, 'label': label}
+            sid += 1
+            yield out
+
+    def __init__(self, items, transform=None):
+
+        instances = []
+        for item in items:
+            for instance in self.get_sentence_pair(item):
+                instances.append(instance)
+        self.instances = instances
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.instances)
+
+    def __getitem__(self, idx):
+        sample = self.instances[idx]
+        if self.transform:
+            sample = self.transform(sample)
+
+        return sample
+
+
 class BertIdx:
     """ Sentence to BERT idx"""
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
 
     def __call__(self, sample):
-        input_ids = torch.zeros(512, dtype=torch.long)
-        token_type_ids = torch.zeros(512, dtype=torch.long)
-        attention_mask = torch.zeros(512, dtype=torch.long)
 
-        tokenized_q = ['[CLS]'] + self.tokenizer.tokenize(sample['question']) + ['[SEP]']
-        tokenized_all = tokenized_q + self.tokenizer.tokenize(sample['sentence'])
+        tokenized_q = ['[CLS]'] + self.tokenizer.tokenize(sample['QTEXT']) + ['[SEP]']
+        tokenized_sent = self.tokenizer.tokenize(sample['sentence'])
+        tokenized_all = tokenized_q + tokenized_sent
         if len(tokenized_all) > 511:
             print("tokenized all > 511 id:{}".format(sample['QID']))
             tokenized_all = tokenized_all[:512]
         tokenized_all += ['[SEP]']
         ids_all = self.tokenizer.convert_tokens_to_ids(tokenized_all)
 
-        input_ids[:len(ids_all)] = torch.tensor(ids_all)
-        token_type_ids[len(tokenized_q):len(tokenized_all)] = 1
-        attention_mask[:len(tokenized_all)] = 1
-
-        sample['input_ids'] = input_ids
-        sample['token_type_ids'] = token_type_ids
-        sample['attention_mask'] = attention_mask
-        sample['label'] = torch.tensor(sample['label'], dtype=torch.long)
+        sample['input_ids'] = ids_all
+        sample['token_type_ids'] = [0]*len(tokenized_q) + [1]*(len(tokenized_sent)+1)
 
         return sample
+
 
 if __name__ == '__main__':
     item_q = prepro_all(config.FGC_DEV)
