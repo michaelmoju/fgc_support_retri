@@ -3,6 +3,7 @@ import json
 import config
 import numpy as np
 import torch
+from torch.nn.utils.rnn import pad_sequence
 from tqdm import tqdm_notebook as tqdm
 from torch.utils.data import Dataset
 from stanfordcorenlp import StanfordCoreNLP
@@ -56,6 +57,8 @@ def item2q(items):
             item_p = keyword2se(d)
             for q in item_p['QUESTIONS']:
                 bunch = {key: value for key, value in d.items()}
+                for key, value in q.items():
+                    bunch[key] = value
                 del bunch['QUESTIONS']
                 item_q.append(bunch)
         except Exception as e:
@@ -160,8 +163,24 @@ class BertIdx:
 
         sample['input_ids'] = ids_all
         sample['token_type_ids'] = [0]*len(tokenized_q) + [1]*(len(tokenized_sent)+1)
+        sample['attention_mask'] = [1]*len(ids_all)
 
         return sample
+
+
+def bert_collate(batch):
+
+    input_ids_batch = pad_sequence([torch.tensor(sample['input_ids']) for sample in batch], batch_first=True)
+    token_type_ids_batch = pad_sequence([torch.tensor(sample['token_type_ids']) for sample in batch], batch_first=True)
+    attention_mask_batch = pad_sequence([torch.tensor(sample['attention_mask']) for sample in batch], batch_first=True)
+    out = {'input_ids': input_ids_batch,
+           'token_type_ids': token_type_ids_batch,
+           'attention_mask': attention_mask_batch}
+
+    if 'label' in batch[0].keys():
+        out['label'] = torch.tensor([sample['label'] for sample in batch])
+
+    return out
 
 
 if __name__ == '__main__':
