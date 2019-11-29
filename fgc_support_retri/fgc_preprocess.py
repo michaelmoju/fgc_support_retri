@@ -8,50 +8,15 @@ from tqdm import tqdm_notebook as tqdm
 from torch.utils.data import Dataset
 
 
-def get_sentence_pair(q_bunch):
-
-    assert len(q_bunch['SENTS']) == len(q_bunch['SUP_EVIDENCE'])
-    out = []
-
-    sid = 0
-    for s, label in zip(q_bunch['SENTS'], q_bunch['SUP_EVIDENCE']):
-        out.append({'DID': q_bunch['DID'], 'QID': q_bunch['QID'], 'SID': sid, 'question': q_bunch['QTEXT'],
-                    'sentence': s[0], 'label': np.array(label)})
-        sid += 1
-    return out
-
-
-class FgcSerDataset(Dataset):
-    """ Supporting evidence FGC dataset"""
-
-    def __init__(self, fgc_fp, transform=None):
-        item_q = prepro_all(fgc_fp)
-        s_bunches = []
-        for q_bunch in item_q:
-            s_bunches += get_sentence_pair(q_bunch)
-        self.s_bunches = s_bunches
-        self.transform = transform
-
-    def __len__(self):
-        return len(self.s_bunches)
-
-    def __getitem__(self, idx):
-        sample = self.s_bunches[idx]
-        if self.transform:
-            sample = self.transform(sample)
-
-        return sample
-
-
-class HotpotDataset(Dataset):
-    "Supporting evidence chinese Hotpot dataset"
+class SerDataset(Dataset):
+    "Supporting evidence dataset"
 
     @staticmethod
     def get_sentence_pair(item):
         assert len(item['SENTS']) == len(item['SUP_EVIDENCE'])
         sid = 0
         for s, label in zip(item['SENTS'], item['SUP_EVIDENCE']):
-            out = {'DID': item['DID'], 'SID': sid, 'QTEXT': item['QTEXT'],
+            out = {'QID': item['QID'], 'SID': sid, 'QTEXT': item['QTEXT'],
                         'sentence': s, 'label': label}
             sid += 1
             yield out
@@ -113,6 +78,3 @@ def bert_collate(batch):
 
     return out
 
-
-if __name__ == '__main__':
-    item_q = prepro_all(config.FGC_DEV)
