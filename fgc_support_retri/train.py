@@ -20,7 +20,7 @@ def train_model():
 	warmup_proportion = 0.1
 	learning_rate = 5e-5
 	num_epochs = 1
-
+	
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	device_num = 0 if torch.cuda.is_available() else -1
 	n_gpu = torch.cuda.device_count()
