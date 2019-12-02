@@ -102,8 +102,11 @@ def read_hotpot(fp, eval=False):
 
 	if eval:
 		sent_num = 0
+        char_num = 0
 		for d in documents:
 			sent_num += len(d['SENTS'])
+            for s in d['SENTS']:
+                char_num += len(s)
 
 		sup_evidence_num = 0
 		for item in new_items:
@@ -111,7 +114,8 @@ def read_hotpot(fp, eval=False):
 
 		print("{} documents".format(len(documents)))
 		print("{} sentences".format(sent_num))
-		print("{} sentences/document".format(sent_num/len(documents)))
+        print("{} sentences/document".format(sent_num/len(documents)))
+        print("{} characters/sentence".format(char_num/sent_num))
 		print("{} questions".format(len(new_items)))
 		print("{} supporting evidence sentences".format(sup_evidence_num))
 		print("{} supporting evidence sentences/question".format(sup_evidence_num/len(new_items)))
@@ -137,8 +141,11 @@ def read_fgc(fp, eval=False):
 
 	if eval:
 		sent_num = 0
+        char_num = 0
 		for d in documents:
 			sent_num += len(d['SENTXS'])
+            for s in d['SENTXS']:
+                char_num += len(s)
 
 		sup_evidence_num = 0
 		for item in items:
@@ -147,6 +154,7 @@ def read_fgc(fp, eval=False):
 		print("{} documents".format(len(documents)))
 		print("{} sentences".format(sent_num))
 		print("{} sentences/document".format(sent_num/len(documents)))
+        print("{} characters/sentence".format(char_num/sent_num))
 		print("{} questions".format(len(items)))
 		print("{} supporting evidence sentences".format(sup_evidence_num))
 		print("{} supporting evidence sentences/question".format(sup_evidence_num/len(items)))
