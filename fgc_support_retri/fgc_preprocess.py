@@ -8,7 +8,7 @@ from tqdm import tqdm_notebook as tqdm
 from torch.utils.data import Dataset
 
 
-class SerDataset(Dataset):
+class SerSentenceDataset(Dataset):
     "Supporting evidence dataset"
 
     @staticmethod
@@ -22,7 +22,6 @@ class SerDataset(Dataset):
             yield out
 
     def __init__(self, items, transform=None):
-
         instances = []
         for item in items:
             for instance in self.get_sentence_pair(item):
@@ -39,15 +38,64 @@ class SerDataset(Dataset):
             sample = self.transform(sample)
 
         return sample
+    
+    
+class SerContextDataset(Dataset):
+    "Supporting evidence dataset"
+
+    def __init__(self, items, transform=None):
+        self.instances = items
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.instances)
+
+    def __getitem__(self, idx):
+        sample = self.instances[idx]
+        if self.transform:
+            sample = self.transform(sample)
+
+        return sample
 
 
+class BertSpanIdx:
+    """Question and all context to idx"""
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+    
+    def __call__(self, sample):
+        tokenized_q = ['[CLS]'] + self.tokenizer.tokenize(sample['QTEXT']) + ['[SEP]']
+        tokenized_all = tokenized_q
+        label_all = [0] * len(tokenized_q)
+        for s_i, sentence in enumerate(sample['SENTS']):
+            before_label = label_all
+            if s_i in sample['SUP_EVIDENCE']:
+                before_label[-1] = 1
+            before_add = tokenized_all
+            add_token = self.tokenizer.tokenize(sentence['text']) + ['[SEP]']
+            tokenized_all += add_token
+            label_all += [0] * len(add_token)
+            
+            if len(tokenized_all) > 512:
+                tokenized_all = before_add
+                label_all = before_label
+                break
+
+        ids_all = self.tokenizer.convert_tokens_to_ids(tokenized_all)
+        
+        sample['input_ids'] = ids_all
+        sample['attention_mask'] = [1]*len(ids_all)
+        sample['label'] = label_all
+        
+        return sample
+            
+        
 class BertIdx:
     """ Sentence to BERT idx"""
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
 
     def __call__(self, sample):
-
         tokenized_q = ['[CLS]'] + self.tokenizer.tokenize(sample['QTEXT']) + ['[SEP]']
         tokenized_sent = self.tokenizer.tokenize(sample['sentence'])
         tokenized_all = tokenized_q + tokenized_sent

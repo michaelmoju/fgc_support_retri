@@ -125,31 +125,32 @@ def read_hotpot(fp, eval=False):
 
 def read_fgc(fp, eval=False):
     def get_item(document):
-        sents = [s['text'].strip() for s in document['SENTXS']]
         for question in document['QUESTIONS']:
-            if question['SHINT'].count(1) <= 0:
+            if not question['SHINT']:
+                print("no gold supporting evidence")
                 print(question)
                 continue
-            out = {'QID': question['QID'], 'SENTS': sents, 'SUP_EVIDENCE': question['SHINT'],
-                   'QTEXT': question['QTEXT']}
+            out = {'QID': question['QID'], 'SENTS': document['SENTS'], 'SUP_EVIDENCE': question['SHINT'],
+                   'QTEXT': question['QTEXT'], 'ANS': question['ANSWER'][0]['ATEXT'], 'ASPAN': question['ASPAN']}
             yield out
 
     with open(fp) as f:
         documents = json.load(f)
-
+    
+    # each item is a context and a question
     items = [item for document in documents for item in get_item(document)]
 
     if eval:
         sent_num = 0
         char_num = 0
         for d in documents:
-            sent_num += len(d['SENTXS'])
-            for s in d['SENTXS']:
-                char_num += len(s)
+            sent_num += len(d['SENTS'])
+            for s in d['SENTS']:
+                char_num += len(s['text'])
 
         sup_evidence_num = 0
         for item in items:
-            sup_evidence_num += item['SUP_EVIDENCE'].count(1)
+            sup_evidence_num += len(item['SUP_EVIDENCE'])
 
         print("{} documents".format(len(documents)))
         print("{} sentences".format(sent_num))
