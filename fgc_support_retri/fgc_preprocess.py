@@ -1,10 +1,5 @@
-import ujson
-import json
-import config
-import numpy as np
 import torch
 from torch.nn.utils.rnn import pad_sequence
-from tqdm import tqdm_notebook as tqdm
 from torch.utils.data import Dataset
 
 
@@ -115,7 +110,10 @@ class BertIdx:
 def bert_collate(batch):
 
     input_ids_batch = pad_sequence([torch.tensor(sample['input_ids']) for sample in batch], batch_first=True)
-    token_type_ids_batch = pad_sequence([torch.tensor(sample['token_type_ids']) for sample in batch], batch_first=True)
+    token_type_ids_batch = None
+    if 'token_type_ids' in batch[0].keys():
+        token_type_ids_batch = pad_sequence([torch.tensor(sample['token_type_ids']) for sample in batch], batch_first=True)
+        
     attention_mask_batch = pad_sequence([torch.tensor(sample['attention_mask']) for sample in batch], batch_first=True)
     out = {'input_ids': input_ids_batch,
            'token_type_ids': token_type_ids_batch,
