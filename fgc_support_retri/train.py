@@ -12,22 +12,20 @@ from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
 import config
 from utils import read_fgc, read_hotpot
-from fgc_preprocess import SerSentenceDataset, BertIdx, BertSpanIdx, bert_collate
+from fgc_preprocess import SerSentenceDataset, SerContextDataset, BertIdx, BertSpanIdx, bert_collate, bert_context_collate
 from sup_model import BertSupSentClassification, BertForMultiHopQuestionAnswering
 
 
-def train_context_model():
+def train_context_model(num_epochs, batch_size, model_file_name):
     torch.manual_seed(12)
     bert_model_name = 'bert-base-chinese'
     warmup_proportion = 0.1
     learning_rate = 2e-5
-    num_epochs = 20
     eval_frequency = 5
-    batch_size = 16
     
-    if not os.path.exists(config.TRAINED_MODEL_PATH):
-        os.mkdir(config.TRAINED_MODEL_PATH)
-    trained_model_path = config.TRAINED_MODEL_PATH
+    trained_model_path = config.TRAINED_MODELS / model_file_name
+    if not os.path.exists(trained_model_path):
+        os.mkdir(trained_model_path)
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n_gpu = torch.cuda.device_count()
@@ -52,11 +50,11 @@ def train_context_model():
     dev_items = read_fgc(config.FGC_DEV, eval=True)
     
     tokenizer = BertTokenizer.from_pretrained('bert-base-chinese')
-    train_set = SerSentenceDataset(train_items, transform=torchvision.transforms.Compose([BertSpanIdx(tokenizer)]))
-    dev_set = SerSentenceDataset(dev_items, transform=torchvision.transforms.Compose([BertSpanIdx(tokenizer)]))
+    train_set = SerContextDataset(train_items, transform=torchvision.transforms.Compose([BertSpanIdx(tokenizer)]))
+    dev_set = SerContextDataset(dev_items, transform=torchvision.transforms.Compose([BertSpanIdx(tokenizer)]))
     
-    dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=bert_collate)
-    dataloader_dev = DataLoader(dev_set, batch_size=64, collate_fn=bert_collate)
+    dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=bert_context_collate)
+    dataloader_dev = DataLoader(dev_set, batch_size=64, collate_fn=bert_context_collate)
     
     optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate)
     num_train_optimization_steps = int(math.ceil(len(train_set) / batch_size)) * num_epochs
@@ -76,8 +74,8 @@ def train_context_model():
             
             loss = model(input_ids,
                          attention_mask=attention_mask,
-                         mode=BertSupSentClassification.ForwardMode.TRAIN,
-                         labels=labels)
+                         mode=BertForMultiHopQuestionAnswering.ForwardMode.TRAIN,
+                         se_start_labels=labels)
             
             if n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu.
@@ -100,8 +98,8 @@ def train_context_model():
                     attention_mask = batch['attention_mask'].to(device)
                     labels = batch['label'].to(device)
                     loss = model(input_ids, token_type_ids=token_type_ids,
-                                 attention_mask=attention_mask, mode=BertSupSentClassification.ForwardMode.TRAIN,
-                                 labels=labels)
+                                 attention_mask=attention_mask, mode=BertForMultiHopQuestionAnswering.ForwardMode.TRAIN,
+                                 se_start_labels=labels)
                     if n_gpu > 1:
                         loss = loss.mean()
                     accum_loss += loss

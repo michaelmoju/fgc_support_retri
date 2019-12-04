@@ -13,7 +13,7 @@ class BertSupSentClassification(nn.Module):
         super(BertSupSentClassification, self).__init__()
         self.bert_encoder = bert_encoder
         self.dropout = nn.Dropout(p=bert_encoder.config.hidden_dropout_prob)
-        self.classifier = nn.Linear(bert_encoder.config.hidden_siz, 1)
+        self.classifier = nn.Linear(bert_encoder.config.hidden_size, 1)
         self.criterion = nn.BCEWithLogitsLoss()
     
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, mode=ForwardMode.TRAIN, labels=None):
@@ -27,6 +27,8 @@ class BertSupSentClassification(nn.Module):
         
         elif mode == BertSupSentClassification.ForwardMode.EVAL:
             return logits
+        
+        else: raise Exception('mode error')
 
 
 class BertForMultiHopQuestionAnswering(nn.Module):
@@ -37,7 +39,7 @@ class BertForMultiHopQuestionAnswering(nn.Module):
     def __init__(self, bert_encoder: BertModel):
         super(BertForMultiHopQuestionAnswering, self).__init__()
         self.bert_encoder = bert_encoder
-        self.se_start_outputs = nn.Linear(bert_encoder.hidden_size, 1)
+        self.se_start_outputs = nn.Linear(bert_encoder.config.hidden_size, 1)
     
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, mode=ForwardMode.TRAIN, se_start_labels=None):
         # shapes: sequence_output [batch_size, max_length, hidden_size], pooled_output [batch_size, hidden_size]
@@ -47,12 +49,14 @@ class BertForMultiHopQuestionAnswering(nn.Module):
         
         if mode == BertForMultiHopQuestionAnswering.ForwardMode.TRAIN:
             lgsfmx = torch.nn.LogSoftmax(dim=1)
-            loss = -torch.sum(se_start_labels * lgsfmx(se_start_logits), dim=-1)
+            loss = -torch.sum(se_start_labels.type(torch.float) * lgsfmx(se_start_logits), dim=-1)
             return loss
         
         elif mode == BertForMultiHopQuestionAnswering.ForwardMode.EVAL:
             sfmx = torch.nn.Softmax(dim=-1)
             return sfmx(se_start_logits)
+        
+        else: raise Exception('mode error')
 
 
 if __name__ == '__main__':

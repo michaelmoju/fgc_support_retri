@@ -1,6 +1,7 @@
 import torch
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
+import copy
 
 
 class SerSentenceDataset(Dataset):
@@ -63,10 +64,10 @@ class BertSpanIdx:
         tokenized_all = tokenized_q
         label_all = [0] * len(tokenized_q)
         for s_i, sentence in enumerate(sample['SENTS']):
-            before_label = label_all
+            before_label = copy.deepcopy(label_all)
             if s_i in sample['SUP_EVIDENCE']:
                 before_label[-1] = 1
-            before_add = tokenized_all
+            before_add = copy.deepcopy(tokenized_all)
             add_token = self.tokenizer.tokenize(sentence['text']) + ['[SEP]']
             tokenized_all += add_token
             label_all += [0] * len(add_token)
@@ -106,14 +107,10 @@ class BertIdx:
 
         return sample
 
-
 def bert_collate(batch):
 
     input_ids_batch = pad_sequence([torch.tensor(sample['input_ids']) for sample in batch], batch_first=True)
-    token_type_ids_batch = None
-    if 'token_type_ids' in batch[0].keys():
-        token_type_ids_batch = pad_sequence([torch.tensor(sample['token_type_ids']) for sample in batch], batch_first=True)
-        
+    token_type_ids_batch = pad_sequence([torch.tensor(sample['token_type_ids']) for sample in batch], batch_first=True)       
     attention_mask_batch = pad_sequence([torch.tensor(sample['attention_mask']) for sample in batch], batch_first=True)
     out = {'input_ids': input_ids_batch,
            'token_type_ids': token_type_ids_batch,
@@ -121,6 +118,20 @@ def bert_collate(batch):
 
     if 'label' in batch[0].keys():
         out['label'] = torch.tensor([sample['label'] for sample in batch])
+
+    return out
+
+def bert_context_collate(batch):
+
+    input_ids_batch = pad_sequence([torch.tensor(sample['input_ids']) for sample in batch], batch_first=True)  
+    attention_mask_batch = pad_sequence([torch.tensor(sample['attention_mask']) for sample in batch], batch_first=True)
+    out = {'input_ids': input_ids_batch,
+           'token_type_ids': torch.zeros(input_ids_batch.shape),
+           'attention_mask': attention_mask_batch}
+
+    if 'label' in batch[0].keys():
+        label_batch = pad_sequence([torch.tensor(sample['label']) for sample in batch], batch_first=True)
+        out['label'] = label_batch
 
     return out
 
