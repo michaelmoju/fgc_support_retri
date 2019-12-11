@@ -47,17 +47,49 @@ class BertForMultiHopQuestionAnswering(nn.Module):
         se_start_logits = self.se_start_outputs(sequence_output)
         se_start_logits = se_start_logits.squeeze(-1)
         
+        sfmx = torch.nn.Softmax(dim=-1)
+        lgsfmx = torch.nn.LogSoftmax(dim=1)
+        
         if mode == BertForMultiHopQuestionAnswering.ForwardMode.TRAIN:
-            lgsfmx = torch.nn.LogSoftmax(dim=1)
             loss = -torch.sum(se_start_labels.type(torch.float) * lgsfmx(se_start_logits), dim=-1)
-            return loss
+            return loss, lgsfmx(se_start_logits)
         
         elif mode == BertForMultiHopQuestionAnswering.ForwardMode.EVAL:
-            sfmx = torch.nn.Softmax(dim=-1)
-            return sfmx(se_start_logits)
+            return lgsfmx(se_start_logits)
         
         else: raise Exception('mode error')
 
+            
+class BertSupTagModel(nn.Module):
+    class ForwardMode(Enum):
+        TRAIN = 0
+        EVAL = 1
+    
+    def __init__(self, bert_encoder: BertModel, device):
+        super(BertSupTagModel, self).__init__()
+        self.bert_encoder = bert_encoder
+        self.dropout = nn.Dropout(p=bert_encoder.config.hidden_dropout_prob)
+        self.tag_out = nn.Linear(bert_encoder.config.hidden_size, 4)
+        self.device = device
+    
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, mode=ForwardMode.TRAIN, labels=None):
+        # shapes: sequence_output [batch_size, max_length, hidden_size], pooled_output [batch_size, hidden_size]
+        sequence_output, hidden_output = self.bert_encoder(input_ids, token_type_ids, attention_mask)
+        sequence_output = self.dropout(sequence_output)
+        tag_outputs = self.tag_out(sequence_output)
+        
+        weight = torch.Tensor([0.1, 1, 0.2, 1]).to(self.device)
+        crssentrpy = torch.nn.CrossEntropyLoss(weight=weight, reduction='mean')
+        sfmx = torch.nn.Softmax(dim=-1)
+        
+        if mode == BertSupTagModel.ForwardMode.TRAIN:
+            loss = crssentrpy(tag_outputs.view(-1,4), labels.view(-1))
+            return loss, sfmx(tag_outputs)
+        
+        elif mode == BertSupTagModel.ForwardMode.EVAL:
+            return torch.argmax(sfmx(tag_outputs), -1)
+        
+        else: raise Exception('mode error')
 
 if __name__ == '__main__':
     pass

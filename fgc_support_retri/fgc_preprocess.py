@@ -52,6 +52,52 @@ class SerContextDataset(Dataset):
             sample = self.transform(sample)
 
         return sample
+    
+    
+class BertSpanTagIdx:
+    """Question and all context to idx"""
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+    
+    def __call__(self, sample):
+        sentence_position = dict()  # index: sentence_i
+        tokenized_q = ['[CLS]'] + self.tokenizer.tokenize(sample['QTEXT']) + ['[SEP]']
+        tokenized_all = tokenized_q
+        if 'SUP_EVIDENCE' in sample.keys():
+            label_all = [0] * len(tokenized_q)
+            
+        for s_i, sentence in enumerate(sample['SENTS']):
+            sentence_position[len(tokenized_all)-1] = s_i
+            
+            if 'SUP_EVIDENCE' in sample.keys():
+                before_label = copy.deepcopy(label_all)
+                    
+            before_add = copy.deepcopy(tokenized_all)
+            add_token = self.tokenizer.tokenize(sentence['text']) + ['[SEP]']
+            tokenized_all += add_token
+            
+            if 'SUP_EVIDENCE' in sample.keys():
+                
+                if s_i in sample['SUP_EVIDENCE']:
+                    label_all += [1] + [2]*(len(add_token)-3) + [3, 0]
+                else:
+                    label_all += [0] * len(add_token)
+            
+            if len(tokenized_all) > 512:
+                tokenized_all = before_add
+                if 'SUP_EVIDENCE' in sample.keys():
+                    label_all = before_label
+                break
+
+        ids_all = self.tokenizer.convert_tokens_to_ids(tokenized_all)
+        
+        sample['input_ids'] = ids_all
+        sample['attention_mask'] = [1]*len(ids_all)
+        sample['sentence_position'] = sentence_position
+        if 'SUP_EVIDENCE' in sample.keys():
+            sample['label'] = label_all
+        
+        return sample
 
 
 class BertSpanIdx:
@@ -60,28 +106,40 @@ class BertSpanIdx:
         self.tokenizer = tokenizer
     
     def __call__(self, sample):
+        negative_value = -1
+        sentence_position = dict()  # index: sentence_i
         tokenized_q = ['[CLS]'] + self.tokenizer.tokenize(sample['QTEXT']) + ['[SEP]']
         tokenized_all = tokenized_q
-        label_all = [0] * len(tokenized_q)
+        if 'SUP_EVIDENCE' in sample.keys():
+            label_all = [negative_value] * len(tokenized_q)
+            
         for s_i, sentence in enumerate(sample['SENTS']):
-            before_label = copy.deepcopy(label_all)
-            if s_i in sample['SUP_EVIDENCE']:
-                before_label[-1] = 1
+            sentence_position[len(tokenized_all)-1] = s_i
+            
+            if 'SUP_EVIDENCE' in sample.keys():
+                before_label = copy.deepcopy(label_all)
+                if s_i in sample['SUP_EVIDENCE']:
+                    before_label[-1] = 1
             before_add = copy.deepcopy(tokenized_all)
             add_token = self.tokenizer.tokenize(sentence['text']) + ['[SEP]']
             tokenized_all += add_token
-            label_all += [0] * len(add_token)
+            
+            if 'SUP_EVIDENCE' in sample.keys():
+                label_all += [negative_value] * len(add_token)
             
             if len(tokenized_all) > 512:
                 tokenized_all = before_add
-                label_all = before_label
+                if 'SUP_EVIDENCE' in sample.keys():
+                    label_all = before_label
                 break
 
         ids_all = self.tokenizer.convert_tokens_to_ids(tokenized_all)
         
         sample['input_ids'] = ids_all
         sample['attention_mask'] = [1]*len(ids_all)
-        sample['label'] = label_all
+        sample['sentence_position'] = sentence_position
+        if 'SUP_EVIDENCE' in sample.keys():
+            sample['label'] = label_all
         
         return sample
             
