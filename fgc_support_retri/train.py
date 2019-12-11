@@ -10,10 +10,11 @@ from transformers import BertModel
 from transformers.tokenization_bert import BertTokenizer
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
-import config
-from utils import read_fgc, read_hotpot
-from fgc_preprocess import SerSentenceDataset, SerContextDataset, BertIdx, BertSpanIdx, BertSpanTagIdx, bert_collate, bert_context_collate
-from sup_model import BertSupSentClassification, BertForMultiHopQuestionAnswering, BertSupTagModel
+from . import config
+from .utils import read_fgc, read_hotpot
+from .fgc_preprocess import SerSentenceDataset, SerContextDataset, BertIdx, BertSpanIdx, BertSpanTagIdx, bert_collate, bert_context_collate
+from .sup_model import BertSentenceSupModel, BertContextSupModel_V1, BertContextSupModel_V2
+from .eval import evalaluate_f1
 
 
 def train_context_model(num_epochs, batch_size, model_file_name):
@@ -32,7 +33,7 @@ def train_context_model(num_epochs, batch_size, model_file_name):
     n_gpu = torch.cuda.device_count()
     
     bert_encoder = BertModel.from_pretrained(bert_model_name)
-    model = BertForMultiHopQuestionAnswering(bert_encoder)
+    model = BertContextSupModel_V1(bert_encoder)
     
     model.to(device)
     if n_gpu > 1:
@@ -74,9 +75,9 @@ def train_context_model(num_epochs, batch_size, model_file_name):
             labels = batch['label'].to(device)
             
             loss, _ = model(input_ids,
-                         attention_mask=attention_mask,
-                         mode=BertForMultiHopQuestionAnswering.ForwardMode.TRAIN,
-                         se_start_labels=labels)
+                            attention_mask=attention_mask,
+                            mode=BertContextSupModel_V1.ForwardMode.TRAIN,
+                            se_start_labels=labels)
             
             if n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu.
@@ -99,8 +100,8 @@ def train_context_model(num_epochs, batch_size, model_file_name):
                     attention_mask = batch['attention_mask'].to(device)
                     labels = batch['label'].to(device)
                     loss, logits = model(input_ids, token_type_ids=token_type_ids,
-                                 attention_mask=attention_mask, mode=BertForMultiHopQuestionAnswering.ForwardMode.TRAIN,
-                                 se_start_labels=labels)
+                                         attention_mask=attention_mask, mode=BertContextSupModel_V1.ForwardMode.TRAIN,
+                                         se_start_labels=labels)
                     if n_gpu > 1:
                         loss = loss.mean()
                     accum_loss += loss
@@ -111,37 +112,11 @@ def train_context_model(num_epochs, batch_size, model_file_name):
             torch.save(model_to_save.state_dict(),
                        str(trained_model_path / "model_epoch{0}_loss_{1:.3f}.m".format(epoch_i, aver_loss)))
 
-def evalaluate_f1(fgc_items, predictions):
-    tp = 0
-    gol_t = 0
-    pre_t = 0
-    for data, prediction in zip(fgc_items, predictions):
-        gold = data['SUP_EVIDENCE']
-        pred = prediction
-        
-        gol_t += len(gold)
-        pre_t += len(pred)
-        for g in gold:
-            if g in pred:
-                tp += 1
-        data['prediction'] = prediction
-    if pre_t == 0:
-        precision = 0
-    else:
-        precision = tp / pre_t
-    recall = tp / gol_t
-    
-    if (precision+recall) == 0:
-        return 0, 0, 0
-    else:
-        f1 = 2*precision*recall / (precision+recall)
-        return precision, recall, f1
-
 
 def train_BertSupTagModel(num_epochs, batch_size, model_file_name):
         
     torch.manual_seed(12)
-    bert_model_name = 'bert-base-chinese'
+    bert_model_name = config.BERT_EMBEDDING
     warmup_proportion = 0.1
     learning_rate = 2e-5
     eval_frequency = 5
@@ -154,7 +129,7 @@ def train_BertSupTagModel(num_epochs, batch_size, model_file_name):
     n_gpu = torch.cuda.device_count()
     
     bert_encoder = BertModel.from_pretrained(bert_model_name)
-    model = BertSupTagModel(bert_encoder, device)
+    model = BertContextSupModel_V2(bert_encoder, device)
     
     model.to(device)
     if n_gpu > 1:
@@ -196,9 +171,9 @@ def train_BertSupTagModel(num_epochs, batch_size, model_file_name):
             labels = batch['label'].to(device)
             
             loss, _ = model(input_ids,
-                         attention_mask=attention_mask,
-                         mode=BertSupTagModel.ForwardMode.TRAIN,
-                         labels=labels)
+                            attention_mask=attention_mask,
+                            mode=BertContextSupModel_V2.ForwardMode.TRAIN,
+                            labels=labels)
             
             if n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu.
@@ -220,10 +195,10 @@ def train_BertSupTagModel(num_epochs, batch_size, model_file_name):
                     input_ids = batch['input_ids'].to(device)
                     token_type_ids = batch['token_type_ids'].to(device)
                     attention_mask = batch['attention_mask'].to(device)
-                    logits = model(input_ids, 
+                    logits = model(input_ids,
                                    token_type_ids=token_type_ids,
-                                   attention_mask=attention_mask, 
-                                   mode=BertSupTagModel.ForwardMode.EVAL)
+                                   attention_mask=attention_mask,
+                                   mode=BertContextSupModel_V2.ForwardMode.EVAL)
                     tag_lists += logits.cpu().numpy().tolist()
                 predictions = []
                 for sample, tags in zip(dev_set, tag_lists):
@@ -265,7 +240,7 @@ def train_sentence_model():
     n_gpu = torch.cuda.device_count()
 
     bert_encoder = BertModel.from_pretrained(bert_model_name)
-    model = BertSupSentClassification(bert_encoder)
+    model = BertSentenceSupModel(bert_encoder)
 
     model.to(device)
     if n_gpu > 1:
@@ -309,7 +284,7 @@ def train_sentence_model():
             labels = batch['label'].to(device)
 
             loss = model(input_ids, token_type_ids=token_type_ids,
-                         attention_mask=attention_mask, mode=BertSupSentClassification.ForwardMode.TRAIN,
+                         attention_mask=attention_mask, mode=BertSentenceSupModel.ForwardMode.TRAIN,
                          labels=labels)
 
             if n_gpu > 1:
@@ -333,7 +308,7 @@ def train_sentence_model():
                     attention_mask = batch['attention_mask'].to(device)
                     labels = batch['label'].to(device)
                     loss = model(input_ids, token_type_ids=token_type_ids,
-                                 attention_mask=attention_mask, mode=BertSupSentClassification.ForwardMode.TRAIN,
+                                 attention_mask=attention_mask, mode=BertSentenceSupModel.ForwardMode.TRAIN,
                                  labels=labels)
                     if n_gpu > 1:
                         loss = loss.mean()

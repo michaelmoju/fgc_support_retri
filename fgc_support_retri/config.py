@@ -15,4 +15,5 @@ HOTPOT_DEV = DATA_ROOT / "hotpot_dataset" / "FGC_hotpot_dev_distractor_v1(cn_ref
 
 TRAINED_MODELS = RESULT_PATH / "trainedmodels" 
 TRAINED_MODEL_PATH = TRAINED_MODELS / ""
+BERT_EMBEDDING = DATA_ROOT / "bert_chinese_total"
 

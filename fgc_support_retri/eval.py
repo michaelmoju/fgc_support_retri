@@ -1,36 +1,34 @@
-import os
-import sys
-import torchvision
-from transformers.tokenization_bert import BertTokenizer
-import numpy as np
-import torch
-import torch.nn as nn
-import torchvision
-from transformers.tokenization_bert import BertTokenizer
-import config
-from torch.utils.data import DataLoader
-from sup_model import BertSupSentClassification
-from transformers import BertModel
-from tqdm import tqdm_notebook as tqdm
-import torch
-import torch.nn as nn
-import torchvision
-from transformers.tokenization_bert import BertTokenizer
-import config
-from fgc_preprocess import SerDataset, BertIdx, bert_collate
-from torch.utils.data import DataLoader
-from sup_model import BertSupSentClassification
-from transformers import BertModel
 from tqdm import tqdm
-import ujson
-import json
-import config
 import numpy as np
 import torch
 from tqdm import tqdm_notebook as tqdm
-from torch.utils.data import Dataset
-from stanfordcorenlp import StanfordCoreNLP
-from utils import read_fgc
+
+
+def evalaluate_f1(fgc_items, predictions):
+    tp = 0
+    gol_t = 0
+    pre_t = 0
+    for data, prediction in zip(fgc_items, predictions):
+        gold = data['SUP_EVIDENCE']
+        pred = prediction
+        
+        gol_t += len(gold)
+        pre_t += len(pred)
+        for g in gold:
+            if g in pred:
+                tp += 1
+        data['prediction'] = prediction
+    if pre_t == 0:
+        precision = 0
+    else:
+        precision = tp / pre_t
+    recall = tp / gol_t
+    
+    if (precision + recall) == 0:
+        return 0, 0, 0
+    else:
+        f1 = 2 * precision * recall / (precision + recall)
+        return precision, recall, f1
 
 
 def evaluate_sent_model(fgc_test_items)
@@ -79,7 +77,7 @@ def evaluate_sent_model(fgc_test_items)
 #     print("precision = {}".format(precision))
 #     print("recall = {}".format(recall))
 #     print("f1 = {}".format(f1))
-    return precision recall f1
+    return precision, recall, f1
 
 
 def evalaluate_contextV1_model(fgc_items):
@@ -108,4 +106,4 @@ def evalaluate_contextV1_model(fgc_items):
 #     print("precision = {}".format(precision))
 #     print("recall = {}".format(recall))
 #     print("f1 = {}".format(f1))
-    return precision recall f1
+    return precision, recall, f1
