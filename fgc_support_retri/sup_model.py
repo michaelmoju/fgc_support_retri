@@ -2,6 +2,7 @@ from enum import Enum
 from transformers import BertModel
 import torch
 import torch.nn as nn
+import torch.nn.functional
 
 
 class BertSentenceSupModel(nn.Module):
@@ -106,6 +107,7 @@ class BertContextSupModel_V3(nn.Module):
         
         self.bigru = nn.GRU(bert_s_encoder.config.hidden_size, 768)
         self.tag_out = nn.Linear(768+768, 1)
+        self.criterion = nn.BCEWithLogitsLoss()
         self.device = device
     
     def forward(self, question, sentences, input_ids, token_type_ids=None, attention_mask=None, mode=ForwardMode.TRAIN, labels=None):
@@ -114,30 +116,23 @@ class BertContextSupModel_V3(nn.Module):
         q_poolout = self.dropout_q(q_poolout)
         
         # shapes: s_poolout [batch_size, sent_num, hidden]
-        _, s_poolout = self.bert_s_encoder(sentences['input_ids'].view(-1, sentences['max_len']),
-                                           sentences['attention_mask'].view(-1, sentences['max_len']))
+        _, s_poolout = self.bert_s_encoder(sentences['input_ids'].view(-1, sentences['max_sent_len']),
+                                           sentences['attention_mask'].view(-1, sentences['max_sent_len']))
         s_poolout = self.dropout_s(s_poolout)
         s_poolout = s_poolout.view(question['input_ids'].shape[0], sentences['max_sent_num'], 768)
         q_poolout.expand(s_poolout.shape)
 
         concat = torch.cat((q_poolout, s_poolout), -1) # [batch, sent_num, 768*2]
-        
-        
-        tag_outputs = self.tag_out(sequence_output)
-        
-        weight = torch.Tensor([0.1, 1, 0.2, 1]).to(self.device)
-        crssentrpy = torch.nn.CrossEntropyLoss(weight=weight, reduction='mean')
-        sfmx = torch.nn.Softmax(dim=-1)
-        
+        logits = self.tag_out(concat)
+        score = nn.functional.sigmoid(logits)
+  
         if mode == BertContextSupModel_V3.ForwardMode.TRAIN:
-            loss = crssentrpy(tag_outputs.view(-1, 4), labels.view(-1))
-            return loss, sfmx(tag_outputs)
+            loss = self.criterion(logits)
+            return loss, score
         
         elif mode == BertContextSupModel_V3.ForwardMode.EVAL:
-            return torch.argmax(sfmx(tag_outputs), -1)
+            return score
         
         else:
             raise Exception('mode error')
 
-if __name__ == '__main__':
-    pass

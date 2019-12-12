@@ -20,7 +20,7 @@ from .eval import evalaluate_f1
 def train_context_model(num_epochs, batch_size, model_file_name):
         
     torch.manual_seed(12)
-    bert_model_name = 'bert-base-chinese'
+    bert_model_name = config.BERT_EMBEDDING
     warmup_proportion = 0.1
     learning_rate = 5e-5
     eval_frequency = 5
@@ -225,7 +225,7 @@ def train_BertSupTagModel(num_epochs, batch_size, model_file_name):
 def train_sentence_model():
     
     torch.manual_seed(12)
-    bert_model_name = 'bert-base-chinese'
+    bert_model_name = config.BERT_EMBEDDING
     warmup_proportion = 0.1
     learning_rate = 2e-5
     num_epochs = 50

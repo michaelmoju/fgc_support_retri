@@ -3,6 +3,8 @@ import numpy as np
 import torch
 from tqdm import tqdm_notebook as tqdm
 
+from .ser_extractor import SER_context_extract, SER_Sent_extract
+
 
 def evalaluate_f1(fgc_items, predictions):
     tp = 0
@@ -31,12 +33,12 @@ def evalaluate_f1(fgc_items, predictions):
         return precision, recall, f1
 
 
-def evaluate_sent_model(fgc_test_items)
+def evaluate_sent_model(fgc_test_items):
 
     tp = 0
     gol_t = 0
     pre_t = 0
-
+    ser_extracter = SER_Sent_extract()
     for item in tqdm(fgc_test_items):
         logits = ser_extracter.predict(item['SENTS'], item['QTEXT'])
         logits_sigmoid = torch.sigmoid(logits)
@@ -84,6 +86,7 @@ def evalaluate_contextV1_model(fgc_items):
     tp = 0
     gol_t = 0
     pre_t = 0
+    extractor = SER_context_extract()
     for data in tqdm(fgc_items):
         topk = 10
         score_list, prediction = extractor.predict(data['SENTS'], data['QTEXT'], topk)

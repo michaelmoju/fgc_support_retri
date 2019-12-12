@@ -3,13 +3,13 @@ from transformers import BertModel, BertTokenizer
 
 from . import config
 from .sup_model import BertContextSupModel_V1, BertSentenceSupModel
-from .fgc_preprocess import BertIdx, BertSpanIdx, BertSpanTagIdx, bert_collate, bert_context_collate
+from .fgc_preprocess import BertIdx, BertSpanIdx, bert_collate, bert_context_collate
 
 
-class SER_extract:
+class SER_Sent_extract:
     def __init__(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        bert_model_name = 'bert-base-chinese'
+        bert_model_name = config.BERT_EMBEDDING
         bert_encoder = BertModel.from_pretrained(bert_model_name)
         bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
         bert_indexer = BertIdx(bert_tokenizer)
@@ -20,7 +20,7 @@ class SER_extract:
         model.to(device)
         model.eval()
         
-        self.tokenizer = tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+        self.tokenizer = BertTokenizer.from_pretrained(bert_model_name)
         self.model = model
         self.bert_indexer = bert_indexer
         self.device = device
@@ -45,7 +45,7 @@ class SER_extract:
 class SER_context_extract:
     def __init__(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        bert_model_name = 'bert-base-chinese'
+        bert_model_name = config.BERT_EMBEDDING
         bert_encoder = BertModel.from_pretrained(bert_model_name)
         bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
         model = BertContextSupModel_V1(bert_encoder)
