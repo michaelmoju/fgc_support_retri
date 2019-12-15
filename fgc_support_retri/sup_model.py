@@ -98,36 +98,42 @@ class BertContextSupModel_V3(nn.Module):
         TRAIN = 0
         EVAL = 1
     
-    def __init__(self, bert_q_encoder: BertModel, bert_s_encoder, device):
+    def __init__(self, bert_encoder: BertModel, device):
         super(BertContextSupModel_V3, self).__init__()
-        self.bert_q_encoder = bert_q_encoder
-        self.bert_s_encoder = bert_s_encoder
-        self.dropout_q = nn.Dropout(p=bert_q_encoder.config.hidden_dropout_prob)
-        self.dropout_s = nn.Dropout(p=bert_s_encoder.config.hidden_dropout_prob)
+        self.bert_encoder = bert_encoder
+        self.dropout = nn.Dropout(p=bert_encoder.config.hidden_dropout_prob)
         
-        self.bigru = nn.GRU(bert_s_encoder.config.hidden_size, 768)
-        self.tag_out = nn.Linear(768+768, 1)
+        self.bigru = nn.GRU(bert_encoder.config.hidden_size, 768, batch_first=True, bidirectional=True)
+        self.tag_out = nn.Linear(768, 1)
+        self.down_size = nn.Linear(768*2, 768)
         self.criterion = nn.BCEWithLogitsLoss()
         self.device = device
     
-    def forward(self, question, sentences, input_ids, token_type_ids=None, attention_mask=None, mode=ForwardMode.TRAIN, labels=None):
+    def forward(self, question, sentences, batch_config, mode=ForwardMode.TRAIN, labels=None):
         # shapes: sequence_output [batch_size, max_length, hidden_size], pooled_output [batch_size, hidden_size]
-        _, q_poolout = self.bert_q_encoder(question['input_ids'], question['attention_mask'])
-        q_poolout = self.dropout_q(q_poolout)
+        _, q_poolout = self.bert_encoder(question['input_ids'], None, question['attention_mask'])
+        q_poolout = self.dropout(q_poolout)
         
         # shapes: s_poolout [batch_size, sent_num, hidden]
-        _, s_poolout = self.bert_s_encoder(sentences['input_ids'].view(-1, sentences['max_sent_len']),
-                                           sentences['attention_mask'].view(-1, sentences['max_sent_len']))
-        s_poolout = self.dropout_s(s_poolout)
-        s_poolout = s_poolout.view(question['input_ids'].shape[0], sentences['max_sent_num'], 768)
-        q_poolout.expand(s_poolout.shape)
+        _, s_poolout = self.bert_encoder(sentences['input_ids'].view(-1, batch_config['max_sent_len']), None, 
+                                           sentences['attention_mask'].view(-1, batch_config['max_sent_len']))
+        s_poolout = self.dropout(s_poolout)
+        s_poolout = s_poolout.view(question['input_ids'].shape[0], batch_config['max_sent_num'], 768)
+        s_poolout, _ = self.bigru(s_poolout)
+        s_poolout = self.down_size(s_poolout)
+        
+        q_poolout = torch.unsqueeze(q_poolout, 1)
+        q_poolout = q_poolout.expand(s_poolout.shape[0], s_poolout.shape[1], s_poolout.shape[2])
 
-        concat = torch.cat((q_poolout, s_poolout), -1) # [batch, sent_num, 768*2]
-        logits = self.tag_out(concat)
+#         concat = torch.cat((q_poolout, s_poolout), -1) # [batch, sent_num, 768*2]
+        multiplication = torch.mul(q_poolout, s_poolout)
+        logits = self.tag_out(multiplication)
+        logits = logits.squeeze(-1)
         score = nn.functional.sigmoid(logits)
-  
+        score = score.squeeze(-1)
+        
         if mode == BertContextSupModel_V3.ForwardMode.TRAIN:
-            loss = self.criterion(logits)
+            loss = self.criterion(logits, labels)
             return loss, score
         
         elif mode == BertContextSupModel_V3.ForwardMode.EVAL:

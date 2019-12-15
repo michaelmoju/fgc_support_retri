@@ -2,8 +2,8 @@ import torch
 from transformers import BertModel, BertTokenizer
 
 from . import config
-from .sup_model import BertContextSupModel_V1, BertSentenceSupModel
-from .fgc_preprocess import BertIdx, BertSpanIdx, bert_collate, bert_context_collate
+from .sup_model import *
+from .fgc_preprocess import *
 
 
 class SER_Sent_extract:
@@ -28,7 +28,7 @@ class SER_Sent_extract:
     def predict(self, context_sents, question):
         batch = []
         for sent in context_sents:
-            sample = self.bert_indexer({'QTEXT':question, 'sentence': sent})
+            sample = self.bert_indexer({'QTEXT':question, 'sentence': sent['text']})
             batch.append(sample)
         batch = bert_collate(batch)      
         with torch.no_grad():
@@ -42,7 +42,7 @@ class SER_Sent_extract:
         return logits
     
     
-class SER_context_extract:
+class SER_context_extract_V1:
     def __init__(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         bert_model_name = config.BERT_EMBEDDING
@@ -80,3 +80,86 @@ class SER_context_extract:
             prediction = sentence_prediction_list[:topk]
             
         return score_list, prediction
+    
+
+class SER_context_extract_V2:
+    def __init__(self):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        bert_model_name = config.BERT_EMBEDDING
+        bert_encoder = BertModel.from_pretrained(bert_model_name)
+        bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+        model = BertContextSupModel_V2(bert_encoder, device)
+#         model_path = config.TRAINED_MODELS / '20191211_BertSupTag'/ 'model_epoch30_eval_recall_0.567_f10.417.m' 
+        model_path = config.TRAINED_MODELS / '20191210_BertSupTag'/ 'model_epoch50_loss_1.025.m'
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        model.to(device)
+        model.eval()
+        
+        self.indexer = BertSpanTagIdx(bert_tokenizer)
+        self.model = model
+        self.device = device
+        
+    def predict(self, context_sents, question):
+        sample = self.indexer({'QTEXT': question, 'SENTS': context_sents})
+        item = bert_context_collate([sample])
+        with torch.no_grad():
+            input_ids = item['input_ids'].to(self.device)
+            token_type_ids = item['token_type_ids'].to(self.device)
+            attention_mask = item['attention_mask'].to(self.device)
+            logits = self.model(input_ids=input_ids, 
+                                token_type_ids=token_type_ids,
+                                attention_mask=attention_mask, 
+                                mode=BertContextSupModel_V2.ForwardMode.EVAL)
+            tag_list = logits[0].cpu().numpy()
+            
+            sep_positions = [None] * len(sample['sentence_position'])
+            for position, sid in sample['sentence_position'].items():
+                sep_positions[sid] = position
+            
+            prediction = []
+            for tid, tag in enumerate(tag_list):
+                if tag == 1:
+                    for sid in range(len(sep_positions)-1):
+                        if sep_positions[sid] < tid < sep_positions[sid+1]:
+                            prediction.append(sid)
+        return prediction 
+
+    
+class SER_context_extract_V3:
+    def __init__(self):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        bert_model_name = config.BERT_EMBEDDING
+        bert_encoder = BertModel.from_pretrained(bert_model_name)
+        bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+        model = BertContextSupModel_V3(bert_encoder, device)
+        model_path = config.TRAINED_MODELS / '20191212_BertContextSupModel_V3_mul_test2'/ 'model_epoch15_eval_recall_0.142_f1_0.103.m'
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        model.to(device)
+        model.eval()
+        
+        self.indexer = BertV3Idx(bert_tokenizer, 50)
+        self.model = model
+        self.device = device
+        
+    def predict(self, context_sents, question, topk):
+        sample = self.indexer({'QTEXT': question, 'SENTS': context_sents})
+        item = bert_collate_v3([sample])
+        with torch.no_grad():
+            question = {key: tensor.to(dtype=torch.int64, device=self.device) for key, tensor in item['question'].items()}
+            sentences = {key: tensor.to(dtype=torch.int64, device=self.device) for key, tensor in item['sentences'].items()}
+                    
+            score = self.model(question, sentences, item['batch_config'], mode=BertContextSupModel_V3.ForwardMode.EVAL)
+            score = score.cpu().numpy().tolist()
+            score = score[0]
+            
+            score_list = [(i, score) for i, score in enumerate(score)]
+            score_list.sort(key=lambda item: item[1], reverse=True)
+
+#             prediction = []
+#             for s_i, s in enumerate(score_list):
+#                 if s >= 0.2:
+#                     prediction.append(s_i)
+        
+            prediction = [i[0] for i in score_list[:topk]]
+                    
+        return prediction

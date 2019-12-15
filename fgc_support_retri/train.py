@@ -17,6 +17,106 @@ from .sup_model import BertSentenceSupModel, BertContextSupModel_V1, BertContext
 from .eval import evalaluate_f1
 
 
+def train_BertContextSupModel_V3(num_epochs, batch_size, model_file_name):
+        
+    torch.manual_seed(12)
+    bert_model_name = config.BERT_EMBEDDING
+    warmup_proportion = 0.1
+    learning_rate = 5e-5
+    eval_frequency = 5
+    
+    trained_model_path = config.TRAINED_MODELS / model_file_name
+    if not os.path.exists(trained_model_path):
+        os.mkdir(trained_model_path)
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    n_gpu = torch.cuda.device_count()
+    
+    bert_encoder = BertModel.from_pretrained(bert_model_name)
+    model = BertContextSupModel_V3(bert_encoder, device)
+    
+    model.to(device)
+    if n_gpu > 1:
+        model = nn.DataParallel(model)
+    
+    param_optimizer = list(model.named_parameters())
+    
+    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+    optimizer_grouped_parameters = [
+        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+    ]
+    
+    # read data
+    train_items = read_fgc(config.FGC_TRAIN, eval=True)
+    train_items.sort(key=lambda item: len(item['SENTS']), reverse=True)
+    dev_items = read_fgc(config.FGC_DEV, eval=True)
+    dev_items.sort(key=lambda item: len(item['SENTS']), reverse=True)
+
+    tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+    train_set = SerContextDataset(train_items, transform=torchvision.transforms.Compose([BertV3Idx(tokenizer, 50)]))
+    dev_set = SerContextDataset(dev_items, transform=torchvision.transforms.Compose([BertV3Idx(tokenizer, 50)]))
+
+    dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=False, collate_fn=bert_collate_v3)
+    dataloader_dev = DataLoader(dev_set, batch_size=64, shuffle=False, collate_fn=bert_collate_v3)
+    
+    optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate)
+    num_train_optimization_steps = int(math.ceil(len(train_set) / batch_size)) * num_epochs
+    scheduler = get_linear_schedule_with_warmup(optimizer,
+                                                num_warmup_steps=int(num_train_optimization_steps * warmup_proportion),
+                                                num_training_steps=num_train_optimization_steps)
+    
+    print('start training ... ')
+    for epoch_i in range(num_epochs + 1):
+        model.train()
+        running_loss = 0.0
+        for batch_i, batch in enumerate(tqdm(dataloader_train)):
+            optimizer.zero_grad()
+            question = {key: tensor.to(dtype=torch.int64, device=device) for key, tensor in batch['question'].items()}
+            sentences = {key: tensor.to(dtype=torch.int64, device=device) for key, tensor in batch['sentences'].items()}
+            labels = batch['label'].to(dtype=torch.float, device=device)
+            
+            loss, _ = model(question, sentences, batch['batch_config'], labels=labels)
+            
+            if n_gpu > 1:
+                loss = loss.mean()  # mean() to average on multi-gpu.
+            
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
+            running_loss += loss.item()
+        
+        print('epoch %d train_loss: %.3f' % (epoch_i, running_loss / len(dataloader_train)))
+        
+        # evaluate
+        if epoch_i % eval_frequency == 0:
+            model.eval()       
+            accum_loss = 0
+            with torch.no_grad():
+                
+                score_list = []
+                for batch in dataloader_dev:
+                    question = {key: tensor.to(dtype=torch.int64, device=device) for key, tensor in batch['question'].items()}
+                    sentences = {key: tensor.to(dtype=torch.int64, device=device) for key, tensor in batch['sentences'].items()}
+                    
+                    score = model(question, sentences, batch['batch_config'], mode=BertContextSupModel_V3.ForwardMode.EVAL)
+                    score_list += score.cpu().numpy().tolist()
+                predictions = []
+                for score in score_list:
+                    prediction = []
+                    for s_i, s in enumerate(score):
+                        if s >= 0.2:
+                            prediction.append(s_i)
+                        predictions.append(prediction)
+                
+            precision, recall, f1 = evalaluate_f1(dev_items, predictions)
+            print('epoch %d eval_recall: %.3f eval_f1: %.3f' % (epoch_i, recall, f1))
+                  
+            model_to_save = model.module if hasattr(model, 'module') else model
+            torch.save(model_to_save.state_dict(),
+                       str(trained_model_path / "model_epoch{0}_eval_recall_{1:.3f}_f1_{2:.3f}.m".format(epoch_i, recall, f1)))
+
+
 def train_context_model(num_epochs, batch_size, model_file_name):
         
     torch.manual_seed(12)
@@ -51,7 +151,7 @@ def train_context_model(num_epochs, batch_size, model_file_name):
     train_items = read_fgc(config.FGC_TRAIN, eval=True)
     dev_items = read_fgc(config.FGC_DEV, eval=True)
     
-    tokenizer = BertTokenizer.from_pretrained('bert-base-chinese')
+    tokenizer = BertTokenizer.from_pretrained(bert_model_name)
     train_set = SerContextDataset(train_items, transform=torchvision.transforms.Compose([BertSpanIdx(tokenizer)]))
     dev_set = SerContextDataset(dev_items, transform=torchvision.transforms.Compose([BertSpanIdx(tokenizer)]))
     
@@ -147,7 +247,7 @@ def train_BertSupTagModel(num_epochs, batch_size, model_file_name):
     train_items = read_fgc(config.FGC_TRAIN, eval=True)
     dev_items = read_fgc(config.FGC_DEV, eval=True)
     
-    tokenizer = BertTokenizer.from_pretrained('bert-base-chinese')
+    tokenizer = BertTokenizer.from_pretrained(bert_model_name)
     train_set = SerContextDataset(train_items, transform=torchvision.transforms.Compose([BertSpanTagIdx(tokenizer)]))
     dev_set = SerContextDataset(dev_items, transform=torchvision.transforms.Compose([BertSpanTagIdx(tokenizer)]))
     
@@ -260,7 +360,7 @@ def train_sentence_model():
     train_items = fgc_items + hotpot_items
     dev_items = read_fgc(config.FGC_DEV, eval=True)
     
-    tokenizer = BertTokenizer.from_pretrained('bert-base-chinese')
+    tokenizer = BertTokenizer.from_pretrained(bert_model_name)
     train_set = SerSentenceDataset(train_items, transform=torchvision.transforms.Compose([BertIdx(tokenizer)]))
     dev_set = SerSentenceDataset(dev_items, transform=torchvision.transforms.Compose([BertIdx(tokenizer)]))
     

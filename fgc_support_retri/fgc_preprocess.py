@@ -55,10 +55,11 @@ class SerContextDataset(Dataset):
     
     
 class BertV3Idx:
-    def __init__(self, tokenizer):
+    def __init__(self, tokenizer, max_sent_len):
         self.tokenizer = tokenizer
+        self.max_sent_len = max_sent_len
     
-    def __call__(self, sample, max_sent_len):
+    def __call__(self, sample):
         tokenized_q = ['[CLS]'] + self.tokenizer.tokenize(sample['QTEXT'])
         tokenized_q = tokenized_q[:511] + ['[SEP]']
         q_ids = self.tokenizer.convert_tokens_to_ids(tokenized_q)
@@ -69,20 +70,20 @@ class BertV3Idx:
         s_att_masks = []
         for sentence in sample['SENTS']:
             tokenized_s = ['[CLS]'] + self.tokenizer.tokenize(sentence['text'])
-            tokenized_s = tokenized_s[:max_sent_len-1] + ['[SEP]']
+            tokenized_s = tokenized_s[:self.max_sent_len-1] + ['[SEP]']
             s_ids = self.tokenizer.convert_tokens_to_ids(tokenized_s)
             s_att_mask = [1] * len(s_ids)
             s_idss.append(s_ids)
             s_att_masks.append(s_att_mask)
-        sentences = {'input_ids': s_idss, 'attention_mask': s_att_masks, 'max_sent_len': max_sent_len}
+        sentences = {'input_ids': s_idss, 'attention_mask': s_att_masks, 'max_sent_len': self.max_sent_len}
         
-        sample['quetion'] = question
+        sample['question'] = question
         sample['sentences'] = sentences
 
         if 'SUP_EVIDENCE' in sample.keys():
             label = [0] * len(sample['SENTS'])
             for evi in sample['SUP_EVIDENCE']:
-               label[evi] = 1
+                label[evi] = 1
             sample['label'] = label
             
         return sample
@@ -244,10 +245,12 @@ def bert_collate_v3(batch):
     sentence_input_ids_batch = torch.zeros((len(batch), max_sent_num, max_sent_len))
     sentence_att_mask_batch = torch.zeros((len(batch), max_sent_num, max_sent_len))
     for sample_i, sample in enumerate(batch):
-        sentence_input_ids_batch[sample_i,:,:] = sample['sentences']['input_ids']
-        sentence_att_mask_batch[sample_i,:,:] = sample['sentences']['attention_mask']
-    sentences = {'max_sent_num': max_sent_num, 'max_sent_len': max_sent_len}
-    out = {'question': question, 'sentences': sentences}
+        for sentence_i in range(len(sample['sentences']['input_ids'])):
+            sentence_input_ids_batch[sample_i, sentence_i, :len(sample['sentences']['input_ids'][sentence_i])] = torch.tensor(sample['sentences']['input_ids'][sentence_i])
+            sentence_att_mask_batch[sample_i, sentence_i, :len(sample['sentences']['attention_mask'][sentence_i])] = torch.tensor(sample['sentences']['attention_mask'][sentence_i])
+    sentences = {'input_ids': sentence_input_ids_batch, 'attention_mask': sentence_att_mask_batch}
+    batch_config = {'max_sent_num': max_sent_num, 'max_sent_len': max_sent_len}
+    out = {'question': question, 'sentences': sentences, 'batch_config': batch_config}
     
     if 'label' in batch[0].keys():
         label_batch = pad_sequence([torch.tensor(sample['label']) for sample in batch], batch_first=True)
