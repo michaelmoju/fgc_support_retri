@@ -83,7 +83,7 @@ class BertV4Idx:
             s_att_mask = [1] * len(s_ids)
             s_idss.append(s_ids)
             s_att_masks.append(s_att_mask)
-        sentences = {'input_ids': s_idss, 'attention_mask': s_att_masks, 'max_sent_len': self.max_sent_len}
+        sentences = {'input_ids': s_idss, 'attention_mask': s_att_masks}
         
         sample['question'] = question
         sample['sentences'] = sentences
