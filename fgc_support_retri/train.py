@@ -13,7 +13,7 @@ from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 from . import config
 from .utils import read_fgc, read_hotpot
 from .fgc_preprocess import SerSentenceDataset, SerContextDataset, BertIdx, BertSpanIdx, BertSpanTagIdx, bert_collate, bert_context_collate
-from .sup_model import BertSentenceSupModel, BertContextSupModel_V1, BertContextSupModel_V2
+from .model import BertSentenceSupModel, BertContextSupModel_V1, BertContextSupModel_V2, BertContextSupModel_V3, BertContextSupModel_V4
 from .eval import evalaluate_f1
 
 
@@ -90,8 +90,7 @@ def train_BertContextSupModel_V3(num_epochs, batch_size, model_file_name):
         
         # evaluate
         if epoch_i % eval_frequency == 0:
-            model.eval()       
-            accum_loss = 0
+            model.eval()
             with torch.no_grad():
                 
                 score_list = []

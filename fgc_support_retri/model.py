@@ -142,3 +142,65 @@ class BertContextSupModel_V3(nn.Module):
         else:
             raise Exception('mode error')
 
+
+class BertContextSupModel_V4(nn.Module):
+
+    def __init__(self, bert_encoder: BertModel, device):
+        super(BertContextSupModel_V4, self).__init__()
+        self.bert_encoder = bert_encoder
+        self.dropout = nn.Dropout(p=bert_encoder.config.hidden_dropout_prob)
+        
+        self.bigru = nn.GRU(bert_encoder.config.hidden_size, 768, batch_first=True, bidirectional=True)
+        self.tag_out = nn.Linear(768, 1)
+        self.down_size = nn.Linear(768 * 2, 768)
+        self.criterion = nn.BCEWithLogitsLoss()
+        self.device = device
+    
+    def forward_nn(self, question, sentences, batch_config):
+        # shapes: sequence_output [batch_size, max_length, hidden_size], pooled_output [batch_size, hidden_size]
+        _, q_poolout = self.bert_encoder(question['input_ids'], None, question['attention_mask'])
+        q_poolout = self.dropout(q_poolout)
+        
+        # shapes: s_poolout [batch_size, sent_num, hidden]
+        _, s_poolout = self.bert_encoder(sentences['input_ids'].view(-1, batch_config['max_sent_len']), None,
+                                         sentences['attention_mask'].view(-1, batch_config['max_sent_len']))
+        s_poolout = self.dropout(s_poolout)
+        s_poolout = s_poolout.view(question['input_ids'].shape[0], batch_config['max_sent_num'], 768)
+        s_poolout, _ = self.bigru(s_poolout)
+        s_poolout = self.down_size(s_poolout)
+        
+        q_poolout = torch.unsqueeze(q_poolout, 1)
+        q_poolout = q_poolout.expand(s_poolout.shape[0], s_poolout.shape[1], s_poolout.shape[2])
+        
+        #         concat = torch.cat((q_poolout, s_poolout), -1) # [batch, sent_num, 768*2]
+        multiplication = torch.mul(q_poolout, s_poolout)
+        logits = self.tag_out(multiplication)
+        logits = logits.squeeze(-1)
+    
+        return logits
+        
+    def forward(self, question, sentences, batch_config, labels):
+        logits = self.forward_nn(question, sentences, batch_config)
+        loss = self.criterion(logits, labels)
+        return loss
+    
+    def _predict(self, logits, topk):
+        score = torch.sigmoid(logits)
+        score = score.cpu().numpy().tolist()
+        score = score[0]
+    
+        score_list = [(i, score) for i, score in enumerate(score)]
+        score_list.sort(key=lambda item: item[1], reverse=True)
+    
+        #             prediction = []
+        #             for s_i, s in enumerate(score_list):
+        #                 if s >= 0.2:
+        #                     prediction.append(s_i)
+    
+        prediction = [i[0] for i in score_list[:topk]]
+        return prediction
+    
+    def predict(self, question, sentences, batch_config, topk=5):
+        logits = self.forward_nn(question, sentences, batch_config)
+        prediction = self._predict(logits, topk)
+        return prediction

@@ -2,7 +2,7 @@ import torch
 from transformers import BertModel, BertTokenizer
 
 from . import config
-from .sup_model import *
+from .model import *
 from .fgc_preprocess import *
 
 
