@@ -2,10 +2,6 @@ import json
 from tqdm import tqdm
 from stanfordcorenlp import StanfordCoreNLP
 
-nlp = StanfordCoreNLP('http://140.109.19.191', port=9000, lang='zh')
-props = {'annotators': 'ssplit', 'ssplit.boundaryTokenRegex': '[。]|[!?！？]+',
-         'outputFormat': 'json', 'pipelineLanguage': 'zh', 'timeout': '5000000'}
-
 
 def sentence_split(dtext):
     anno = json.loads(nlp.annotate(dtext))
