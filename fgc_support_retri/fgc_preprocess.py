@@ -132,7 +132,7 @@ class BertV3Idx:
         return sample
     
     
-class BertSpanTagIdx:
+class BertV2Idx:
     """Question and all context to idx"""
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
@@ -178,7 +178,7 @@ class BertSpanTagIdx:
         return sample
 
 
-class BertSpanIdx:
+class BertV1Idx:
     """Question and all context to idx"""
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
@@ -220,9 +220,63 @@ class BertSpanIdx:
             sample['label'] = label_all
         
         return sample
+    
+
+class BertSentV2Idx:
+    """ Sentence to BERT idx
+        tf_match: 1 if the token match target q or s; 0 otherwise
+        idf_match: 1 if the token match other context token; 0 otherwise
+    
+    """
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+
+    def __call__(self, sample):
+        tokenized_q = self.tokenizer.tokenize(sample['QTEXT'])
+        tokenized_s = self.tokenizer.tokenize(sample['sentence'])
+        tokenized_c = self.tokenizer.tokenize(sample['other_context'])
+        
+        tf_match_q = [0] * len(tokenized_q)
+        tf_match_s = [0] * len(tokenized_s)
+        idf_match_q = [0] * len(tokenized_q)
+        idf_match_s = [0] * len(tokenized_s)
+        
+        for i, token in enumerate(tokenized_q):
+            if token in tokenized_s:
+                tf_match_q[i] = 1
+            if token in tokenized_c:
+                idf_match_q[i] = 1
+        for i, token in enumerate(tokenized_s):
+            if token in tokenized_q:
+                tf_match_s[i] = 1
+            if token in tokenized_c:
+                idf_match_s[i] = 1
+        
+        tokenized_q = ['[CLS]'] + tokenized_q + ['[SEP]']
+        tokenized_all = tokenized_q + tokenized_s
+        tf_match = [0] + tf_match_q + [0] + tf_match_s
+        idf_match = [0] + idf_match_q + [0] + idf_match_s
+        if len(tokenized_all) > 511:
+            print("tokenized all > 511 id:{}".format(sample['QID']))
+            tokenized_all = tokenized_all[:512]
+            tf_match = tf_match[:512]
+            idf_match = idf_match[:512]
+        tokenized_all += ['[SEP]']
+        tf_match += [0]
+        idf_match += [0]
+        
+        ids_all = self.tokenizer.convert_tokens_to_ids(tokenized_all)
+
+        sample['input_ids'] = ids_all
+        sample['token_type_ids'] = [0]*len(tokenized_q) + [1]*(len(tokenized_s)+1)
+        sample['attention_mask'] = [1]*len(ids_all)
+        sample['tf_match'] = tf_match
+        sample['idf_match'] = idf_match
+
+        return sample
             
         
-class BertIdx:
+class BertSentV1Idx:
     """ Sentence to BERT idx"""
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
@@ -244,14 +298,34 @@ class BertIdx:
         return sample
 
 
-def bert_collate(batch):
+def bert_sentV1_collate(batch):
+    input_ids_batch = pad_sequence([torch.tensor(sample['input_ids']) for sample in batch], batch_first=True)
+    token_type_ids_batch = pad_sequence([torch.tensor(sample['token_type_ids']) for sample in batch], batch_first=True)
+    attention_mask_batch = pad_sequence([torch.tensor(sample['attention_mask']) for sample in batch], batch_first=True)
+    
+    out = {'input_ids': input_ids_batch,
+           'token_type_ids': token_type_ids_batch,
+           'attention_mask': attention_mask_batch}
+    
+    if 'label' in batch[0].keys():
+        out['label'] = torch.tensor([sample['label'] for sample in batch])
+    
+    return out
+
+
+def bert_sentV2_collate(batch):
 
     input_ids_batch = pad_sequence([torch.tensor(sample['input_ids']) for sample in batch], batch_first=True)
     token_type_ids_batch = pad_sequence([torch.tensor(sample['token_type_ids']) for sample in batch], batch_first=True)       
     attention_mask_batch = pad_sequence([torch.tensor(sample['attention_mask']) for sample in batch], batch_first=True)
+    tf_match = pad_sequence([torch.tensor(sample['tf_match']) for sample in batch], batch_first=True)
+    idf_match = pad_sequence([torch.tensor(sample['idf_match']) for sample in batch], batch_first=True)
+    
     out = {'input_ids': input_ids_batch,
            'token_type_ids': token_type_ids_batch,
-           'attention_mask': attention_mask_batch}
+           'attention_mask': attention_mask_batch,
+           'tf_match': tf_match,
+           'idf_match': idf_match}
 
     if 'label' in batch[0].keys():
         out['label'] = torch.tensor([sample['label'] for sample in batch])

@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from tqdm import tqdm_notebook as tqdm
 
-from .ser_extractor import SER_Sent_extract, SER_context_extract_V1, SER_context_extract_V2, SER_context_extract_V3
+from .ser_extractor import SER_sent_extract_V1, SER_context_extract_V1, SER_context_extract_V2, SER_context_extract_V3
 
 def evalaluate_f1(fgc_items, predictions):
     tp = 0
@@ -33,7 +33,7 @@ def evalaluate_f1(fgc_items, predictions):
 
 
 def evaluate_sent_model(fgc_items, show=False):
-    ser_extracter = SER_Sent_extract()
+    ser_extracter = SER_sent_extract_V1()
     
     predictions = []
     for item in tqdm(fgc_items):

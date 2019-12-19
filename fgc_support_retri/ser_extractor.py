@@ -6,14 +6,14 @@ from .model import *
 from .fgc_preprocess import *
 
 
-class SER_Sent_extract:
+class SER_sent_extract_V1:
     def __init__(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         bert_model_name = config.BERT_EMBEDDING
         bert_encoder = BertModel.from_pretrained(bert_model_name)
         bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
-        bert_indexer = BertIdx(bert_tokenizer)
-        model = BertSentenceSupModel(bert_encoder)
+        bert_indexer = BertSentV1Idx(bert_tokenizer)
+        model = BertSentenceSupModel_V1(bert_encoder)
 #         model_path = config.TRAINED_MODELS / '20191129-with_hotpot'/ 'model_epoch5_loss_0.226.m'
         model_path = config.TRAINED_MODELS / '20191128'/ 'model_epoch5_loss_0.213.m' 
         model.load_state_dict(torch.load(model_path, map_location=device))
@@ -30,7 +30,7 @@ class SER_Sent_extract:
         for sent in context_sents:
             sample = self.bert_indexer({'QTEXT':question, 'sentence': sent['text']})
             batch.append(sample)
-        batch = bert_collate(batch)      
+        batch = bert_sentV1_collate(batch)
         with torch.no_grad():
             input_ids = batch['input_ids'].to(self.device)
             token_type_ids = batch['token_type_ids'].to(self.device)
@@ -38,7 +38,43 @@ class SER_Sent_extract:
             logits = self.model(input_ids=input_ids,
                                 token_type_ids=token_type_ids,
                                 attention_mask=attention_mask,
-                                mode=BertSentenceSupModel.ForwardMode.EVAL)
+                                mode=BertSentenceSupModel_V1.ForwardMode.EVAL)
+        return logits
+
+
+class SER_sent_extract_V2:
+    def __init__(self):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        bert_model_name = config.BERT_EMBEDDING
+        bert_encoder = BertModel.from_pretrained(bert_model_name)
+        bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+        bert_indexer = BertSentV1Idx(bert_tokenizer)
+        model = BertSentenceSupModel_V1(bert_encoder)
+        #         model_path = config.TRAINED_MODELS / '20191129-with_hotpot'/ 'model_epoch5_loss_0.226.m'
+        model_path = config.TRAINED_MODELS / '20191128' / 'model_epoch5_loss_0.213.m'
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        model.to(device)
+        model.eval()
+        
+        self.tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+        self.model = model
+        self.bert_indexer = bert_indexer
+        self.device = device
+    
+    def predict(self, context_sents, question):
+        batch = []
+        for sent in context_sents:
+            sample = self.bert_indexer({'QTEXT': question, 'sentence': sent['text']})
+            batch.append(sample)
+        batch = bert_sentV1_collate(batch)
+        with torch.no_grad():
+            input_ids = batch['input_ids'].to(self.device)
+            token_type_ids = batch['token_type_ids'].to(self.device)
+            attention_mask = batch['attention_mask'].to(self.device)
+            logits = self.model(input_ids=input_ids,
+                                token_type_ids=token_type_ids,
+                                attention_mask=attention_mask,
+                                mode=BertSentenceSupModel_V1.ForwardMode.EVAL)
         return logits
     
     
@@ -54,7 +90,7 @@ class SER_context_extract_V1:
         model.to(device)
         model.eval()
         
-        self.indexer = BertSpanIdx(bert_tokenizer)
+        self.indexer = BertV1Idx(bert_tokenizer)
         self.model = model
         self.device = device
         
@@ -95,7 +131,7 @@ class SER_context_extract_V2:
         model.to(device)
         model.eval()
         
-        self.indexer = BertSpanTagIdx(bert_tokenizer)
+        self.indexer = BertV2Idx(bert_tokenizer)
         self.model = model
         self.device = device
         

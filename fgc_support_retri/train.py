@@ -13,7 +13,7 @@ from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 from . import config
 from .utils import read_fgc, read_hotpot
 from .fgc_preprocess import *
-from .model import BertSentenceSupModel, BertContextSupModel_V1, BertContextSupModel_V2, BertContextSupModel_V3, BertContextSupModel_V4
+from .model import BertSentenceSupModel_V1, BertContextSupModel_V1, BertContextSupModel_V2, BertContextSupModel_V3, BertContextSupModel_V4
 from .eval import evalaluate_f1
 
 def train_BertContextSupModel_V4(num_epochs, batch_size, model_file_name):
@@ -243,8 +243,8 @@ def train_context_model(num_epochs, batch_size, model_file_name):
     dev_items = read_fgc(config.FGC_DEV, eval=True)
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
-    train_set = SerContextDataset(train_items, transform=torchvision.transforms.Compose([BertSpanIdx(tokenizer)]))
-    dev_set = SerContextDataset(dev_items, transform=torchvision.transforms.Compose([BertSpanIdx(tokenizer)]))
+    train_set = SerContextDataset(train_items, transform=torchvision.transforms.Compose([BertV1Idx(tokenizer)]))
+    dev_set = SerContextDataset(dev_items, transform=torchvision.transforms.Compose([BertV1Idx(tokenizer)]))
     
     dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=bert_context_collate)
     dataloader_dev = DataLoader(dev_set, batch_size=64, collate_fn=bert_context_collate)
@@ -339,8 +339,8 @@ def train_BertSupTagModel(num_epochs, batch_size, model_file_name):
     dev_items = read_fgc(config.FGC_DEV, eval=True)
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
-    train_set = SerContextDataset(train_items, transform=torchvision.transforms.Compose([BertSpanTagIdx(tokenizer)]))
-    dev_set = SerContextDataset(dev_items, transform=torchvision.transforms.Compose([BertSpanTagIdx(tokenizer)]))
+    train_set = SerContextDataset(train_items, transform=torchvision.transforms.Compose([BertV2Idx(tokenizer)]))
+    dev_set = SerContextDataset(dev_items, transform=torchvision.transforms.Compose([BertV2Idx(tokenizer)]))
     
     dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=bert_context_collate)
     dataloader_dev = DataLoader(dev_set, batch_size=64, collate_fn=bert_context_collate)
@@ -431,7 +431,7 @@ def train_sentence_model():
     n_gpu = torch.cuda.device_count()
 
     bert_encoder = BertModel.from_pretrained(bert_model_name)
-    model = BertSentenceSupModel(bert_encoder)
+    model = BertSentenceSupModel_V1(bert_encoder)
 
     model.to(device)
     if n_gpu > 1:
@@ -452,11 +452,11 @@ def train_sentence_model():
     dev_items = read_fgc(config.FGC_DEV, eval=True)
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
-    train_set = SerSentenceDataset(train_items, transform=torchvision.transforms.Compose([BertIdx(tokenizer)]))
-    dev_set = SerSentenceDataset(dev_items, transform=torchvision.transforms.Compose([BertIdx(tokenizer)]))
+    train_set = SerSentenceDataset(train_items, transform=torchvision.transforms.Compose([BertSentV1Idx(tokenizer)]))
+    dev_set = SerSentenceDataset(dev_items, transform=torchvision.transforms.Compose([BertSentV1Idx(tokenizer)]))
     
-    dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=bert_collate)
-    dataloader_dev = DataLoader(dev_set, batch_size=64, collate_fn=bert_collate)
+    dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=bert_sentV1_collate)
+    dataloader_dev = DataLoader(dev_set, batch_size=64, collate_fn=bert_sentV1_collate)
     
     optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate)
     num_train_optimization_steps = int(math.ceil(len(train_set) / batch_size)) * num_epochs
@@ -475,7 +475,7 @@ def train_sentence_model():
             labels = batch['label'].to(device)
 
             loss = model(input_ids, token_type_ids=token_type_ids,
-                         attention_mask=attention_mask, mode=BertSentenceSupModel.ForwardMode.TRAIN,
+                         attention_mask=attention_mask, mode=BertSentenceSupModel_V1.ForwardMode.TRAIN,
                          labels=labels)
 
             if n_gpu > 1:
@@ -499,7 +499,7 @@ def train_sentence_model():
                     attention_mask = batch['attention_mask'].to(device)
                     labels = batch['label'].to(device)
                     loss = model(input_ids, token_type_ids=token_type_ids,
-                                 attention_mask=attention_mask, mode=BertSentenceSupModel.ForwardMode.TRAIN,
+                                 attention_mask=attention_mask, mode=BertSentenceSupModel_V1.ForwardMode.TRAIN,
                                  labels=labels)
                     if n_gpu > 1:
                         loss = loss.mean()
