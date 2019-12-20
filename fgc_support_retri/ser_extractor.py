@@ -1,4 +1,5 @@
 import torch
+import torchvision
 from transformers import BertModel, BertTokenizer
 
 from . import config
@@ -46,36 +47,31 @@ class SER_sent_extract_V2:
     def __init__(self):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         bert_model_name = config.BERT_EMBEDDING
-        bert_encoder = BertModel.from_pretrained(bert_model_name)
         bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
         bert_indexer = BertSentV1Idx(bert_tokenizer)
-        model = BertSentenceSupModel_V1(bert_encoder)
-        #         model_path = config.TRAINED_MODELS / '20191129-with_hotpot'/ 'model_epoch5_loss_0.226.m'
-        model_path = config.TRAINED_MODELS / '20191128' / 'model_epoch5_loss_0.213.m'
+        model = BertSentenceSupModel_V2.from_pretrained(bert_model_name)
+        model_path = config.TRAINED_MODELS / '20191219_test2' / 'model_epoch20_eval_recall_0.524_f1_0.465.m'
         model.load_state_dict(torch.load(model_path, map_location=device))
         model.to(device)
         model.eval()
         
-        self.tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+        self.tokenizer = bert_tokenizer
         self.model = model
         self.bert_indexer = bert_indexer
         self.device = device
     
-    def predict(self, context_sents, question):
-        batch = []
-        for sent in context_sents:
-            sample = self.bert_indexer({'QTEXT': question, 'sentence': sent['text']})
-            batch.append(sample)
-        batch = bert_sentV1_collate(batch)
-        with torch.no_grad():
-            input_ids = batch['input_ids'].to(self.device)
-            token_type_ids = batch['token_type_ids'].to(self.device)
-            attention_mask = batch['attention_mask'].to(self.device)
-            logits = self.model(input_ids=input_ids,
-                                token_type_ids=token_type_ids,
-                                attention_mask=attention_mask,
-                                mode=BertSentenceSupModel_V1.ForwardMode.EVAL)
-        return logits
+    def predict(self, items):
+        predictions = []
+        for item in items:
+            with torch.no_grad():
+                train_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([BertSentV2Idx(self.tokenizer)]))
+                batch = bert_sentV2_collate([sample for sample in train_set])
+                for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type']:
+                    batch[key] = batch[key].to(self.device)
+                prediction = self.model.predict(batch, threshold=0.03)
+                predictions.append(prediction)
+                
+        return predictions 
     
     
 class SER_context_extract_V1:

@@ -9,12 +9,20 @@ class SerSentenceDataset(Dataset):
 
     @staticmethod
     def get_sentence_pair(item):
-        assert len(item['SENTS']) == len(item['SUP_EVIDENCE'])
-        sid = 0
-        for s, label in zip(item['SENTS'], item['SUP_EVIDENCE']):
-            out = {'QID': item['QID'], 'SID': sid, 'QTEXT': item['QTEXT'],
-                        'sentence': s, 'label': label}
-            sid += 1
+        for target_i, sentence in enumerate(item['SENTS']):
+            other_context = ""
+            for context_i, context_s in enumerate(item['SENTS']):
+                if target_i != context_i:
+                    other_context += context_s['text']
+            out = {'QTEXT': item['QTEXT'], 'sentence': sentence['text'], 'other_context': other_context}
+       
+            if 'SUP_EVIDENCE' in item.keys():
+                assert len(item['SUP_EVIDENCE']) > 0
+                if target_i in item['SUP_EVIDENCE']:
+                    out['label'] = 1
+                else:
+                    out['label'] = 0
+    
             yield out
 
     def __init__(self, items, transform=None):
@@ -324,8 +332,8 @@ def bert_sentV2_collate(batch):
     out = {'input_ids': input_ids_batch,
            'token_type_ids': token_type_ids_batch,
            'attention_mask': attention_mask_batch,
-           'tf_match': tf_match,
-           'idf_match': idf_match}
+           'tf_type': tf_match,
+           'idf_type': idf_match}
 
     if 'label' in batch[0].keys():
         out['label'] = torch.tensor([sample['label'] for sample in batch])

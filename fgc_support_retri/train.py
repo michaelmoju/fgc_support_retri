@@ -98,7 +98,7 @@ def train_BertContextSupModel_V4(num_epochs, batch_size, model_file_name):
                     question = {key: tensor.to(dtype=torch.int64, device=device) for key, tensor in batch['question'].items()}
                     sentences = {key: tensor.to(dtype=torch.int64, device=device) for key, tensor in batch['sentences'].items()}
 
-                    prediction = model.predict(question, sentences, batch['batch_config'])
+                    prediction = model.module.predict(question, sentences, batch['batch_config'])
                     predictions.append(prediction)
 
             precision, recall, f1 = evalaluate_f1(dev_items, predictions)
@@ -509,6 +509,95 @@ def train_sentence_model():
 
             model_to_save = model.module if hasattr(model, 'module') else model
             torch.save(model_to_save.state_dict(), str(trained_model_path/ "model_epoch{0}_loss_{1:.3f}.m".format(epoch_i, aver_loss)))
+            
+
+def train_sentence_model_2(num_epochs, batch_size, model_file_name):
+    
+    torch.manual_seed(12)
+    bert_model_name = config.BERT_EMBEDDING
+    warmup_proportion = 0.1
+    learning_rate = 5e-5
+    eval_frequency = 5
+    
+    trained_model_path = config.TRAINED_MODELS / model_file_name
+    if not os.path.exists(trained_model_path):
+        os.mkdir(trained_model_path)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    n_gpu = torch.cuda.device_count()
+
+    model = BertSentenceSupModel_V2.from_pretrained(bert_model_name)
+
+    model.to(device)
+    if n_gpu > 1:
+        model = nn.DataParallel(model)
+
+    param_optimizer = list(model.named_parameters())
+
+    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+    optimizer_grouped_parameters = [
+        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+    ]
+    
+    # read data
+    fgc_items = read_fgc(config.FGC_TRAIN, eval=True)
+    train_items = fgc_items
+    dev_items = read_fgc(config.FGC_DEV, eval=True)
+    
+    tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+    train_set = SerSentenceDataset(train_items, transform=torchvision.transforms.Compose([BertSentV2Idx(tokenizer)]))
+    
+    dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=bert_sentV2_collate)
+    
+    optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate)
+    num_train_optimization_steps = int(math.ceil(len(train_set) / batch_size)) * num_epochs
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=int(num_train_optimization_steps*warmup_proportion),
+                                                num_training_steps=num_train_optimization_steps)
+    
+    print('start training ... ')
+    for epoch_i in range(num_epochs+1):
+        model.train()
+        running_loss = 0.0
+        for batch_i, batch in enumerate(tqdm(dataloader_train)):
+            optimizer.zero_grad()
+            
+            for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type']:
+                batch[key] = batch[key].to(device)
+                
+            batch['label'] = batch['label'].to(dtype=torch.float, device=device)
+            loss = model(batch)
+
+            if n_gpu > 1:
+                loss = loss.mean()  # mean() to average on multi-gpu.
+
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
+            running_loss += loss.item()
+
+        print('epoch %d train_loss: %.3f' % (epoch_i, running_loss/len(dataloader_train)))
+
+        if epoch_i % eval_frequency == 0:
+            model.eval()
+
+            with torch.no_grad():
+                predictions = []
+                for item in dev_items:
+                    train_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([BertSentV2Idx(tokenizer)]))
+                    batch = bert_sentV2_collate([sample for sample in train_set])
+                    for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type']:
+                        batch[key] = batch[key].to(device)
+
+                    prediction = model.module.predict(batch)
+                    predictions.append(prediction)
+
+                precision, recall, f1 = evalaluate_f1(dev_items, predictions)
+                print('epoch %d eval_recall: %.3f eval_f1: %.3f' % (epoch_i, recall, f1))
+
+                model_to_save = model.module if hasattr(model, 'module') else model
+                torch.save(model_to_save.state_dict(),
+                           str(trained_model_path / "model_epoch{0}_eval_recall_{1:.3f}_f1_{2:.3f}.m".format(epoch_i, recall, f1)))
 
 if __name__=='__main__':
     train_BertContextSupModel_V4(20, 3, '20191218test')
