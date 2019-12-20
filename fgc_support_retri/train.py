@@ -13,7 +13,7 @@ from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 from . import config
 from .utils import read_fgc, read_hotpot
 from .fgc_preprocess import *
-from .model import BertSentenceSupModel_V1, BertContextSupModel_V1, BertContextSupModel_V2, BertContextSupModel_V3, BertContextSupModel_V4
+from .model import *
 from .eval import evalaluate_f1
 
 def train_BertContextSupModel_V4(num_epochs, batch_size, model_file_name):
@@ -517,7 +517,7 @@ def train_sentence_model_2(num_epochs, batch_size, model_file_name):
     bert_model_name = config.BERT_EMBEDDING
     warmup_proportion = 0.1
     learning_rate = 5e-5
-    eval_frequency = 5
+    eval_frequency = 3
     
     trained_model_path = config.TRAINED_MODELS / model_file_name
     if not os.path.exists(trained_model_path):
@@ -541,9 +541,11 @@ def train_sentence_model_2(num_epochs, batch_size, model_file_name):
     ]
     
     # read data
-    fgc_items = read_fgc(config.FGC_TRAIN, eval=True)
-    train_items = fgc_items
-    dev_items = read_fgc(config.FGC_DEV, eval=True)
+    fgc_train_items = read_fgc(config.FGC_TRAIN)
+    fgc_dev_items = read_fgc(config.FGC_DEV)
+    fgc_test_items = read_fgc(config.FGC_TEST)
+    train_items = fgc_train_items + fgc_dev_items + fgc_test_items
+    dev_items = fgc_dev_items
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
     train_set = SerSentenceDataset(train_items, transform=torchvision.transforms.Compose([BertSentV2Idx(tokenizer)]))

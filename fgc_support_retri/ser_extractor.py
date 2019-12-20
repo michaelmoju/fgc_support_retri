@@ -59,6 +59,12 @@ class SER_sent_extract_V2:
         self.model = model
         self.bert_indexer = bert_indexer
         self.device = device
+        
+    def get_item(document):
+        for question in document['QUESTIONS']:
+            out = {'QID': question['QID'], 'SENTS': document['SENTS'],
+                   'QTEXT': question['QTEXT'], 'ANS': question['ANSWER'][0]['ATEXT'], 'ASPAN': question['ASPAN']}
+            yield out
     
     def predict(self, items):
         predictions = []
@@ -71,7 +77,15 @@ class SER_sent_extract_V2:
                 prediction = self.model.predict(batch, threshold=0.03)
                 predictions.append(prediction)
                 
-        return predictions 
+        return predictions
+    
+    def predict_all_documents(self, documents):
+        all_predictions = []
+        for document in tqdm(documents):
+            items = [item for document in documents for item in get_item(document)]
+            predictions = predict(items)
+            all_predictions.append(predictions)
+        return all_predictions
     
     
 class SER_context_extract_V1:

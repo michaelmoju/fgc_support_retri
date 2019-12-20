@@ -6,31 +6,52 @@ import torch.nn as nn
 import torch.nn.functional
 
 
-class BertSentenceSupModel_V1(nn.Module):
-    class ForwardMode(Enum):
-        TRAIN = 0
-        EVAL = 1
-    
+class BertSentenceSupModel_V1(nn.Module):    
     def __init__(self, bert_encoder: BertModel):
         super(BertSentenceSupModel_V1, self).__init__()
         self.bert_encoder = bert_encoder
         self.dropout = nn.Dropout(p=bert_encoder.config.hidden_dropout_prob)
-        self.classifier = nn.Linear(bert_encoder.config.hidden_size, 1)
+        self.linear1 = nn.Linear(config.hidden_size, 20)
+        self.linear2 = nn.Linear(20, 1)
         self.criterion = nn.BCEWithLogitsLoss()
+        
+    def forward_nn(self, input_ids, token_type_ids=None, attention_mask=None):
+        _, q_poolout = self.bert(input_ids, token_type_ids, attention_mask)
+        hidden = self.linear1(q_poolout)
+        logits = self.linear2(hidden)
+        logits = logits.squeeze(-1)
+        return logits
     
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None, mode=ForwardMode.TRAIN, labels=None):
-        sequence_output, pooled_output = self.bert_encoder(input_ids, token_type_ids, attention_mask)
-        hidden = self.dropout(pooled_output)
-        logits = self.classifier(hidden)
+    def forward(self, batch):
+        logits = self.forward_nn(batch['input_ids'], batch['token_type_ids'], batch['attention_mask'])
+        loss = self.criterion(logits, batch['label'])
+        return loss
+
+    def _predict(self, logits):
+        scores = torch.sigmoid(logits)
+        scores = scores.cpu().numpy().tolist()
+    
+        score_list = [(i, score) for i, score in enumerate(scores)]
+        return score_list
+
+    def predict(self, batch, threshold=0.5):
+        logits = self.forward_nn(batch['input_ids'], batch['token_type_ids'], batch['attention_mask'])
+        score_list = self._predict(logits)
         
-        if mode == BertSentenceSupModel_V1.ForwardMode.TRAIN:
-            loss = self.criterion(logits, labels.unsqueeze(-1).float())
-            return loss
-        
-        elif mode == BertSentenceSupModel_V1.ForwardMode.EVAL:
-            return logits
-        
-        else: raise Exception('mode error')
+        max_i = 0
+        max_score = 0
+        prediction = []
+        for i, score in score_list:
+            if score > max_score:
+                max_i = i
+            if score >= threshold:
+                prediction.append(i)
+                
+        if len(prediction)<3:
+            score_list.sort(key=lambda item: item[1], reverse=True)
+            prediction = [i for i,score in score_list[:3]]
+            
+        return prediction
 
 
 class BertContextSupModel_V1(nn.Module):
@@ -403,6 +424,6 @@ class BertSentenceSupModel_V2(BertPreTrainedModel):
                 
         if len(prediction)<3:
             score_list.sort(key=lambda item: item[1], reverse=True)
-            prediction = [i for i,score in score_list[:3]]
+            prediction = [i for i,score in score_list[:1]]
             
         return prediction

@@ -18,7 +18,6 @@ def evalaluate_f1(fgc_items, predictions):
         for g in gold:
             if g in pred:
                 tp += 1
-        data['prediction'] = prediction
     if pre_t == 0:
         precision = 0
     else:
