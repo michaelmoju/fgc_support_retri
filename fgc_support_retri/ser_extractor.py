@@ -62,8 +62,7 @@ class SER_sent_extract_V2:
         
     def get_item(document):
         for question in document['QUESTIONS']:
-            out = {'QID': question['QID'], 'SENTS': document['SENTS'],
-                   'QTEXT': question['QTEXT'], 'ANS': question['ANSWER'][0]['ATEXT'], 'ASPAN': question['ASPAN']}
+            out = {'QID': question['QID'], 'SENTS': document['SENTS'], 'QTEXT': question['QTEXT']}
             yield out
     
     def predict(self, items):
@@ -79,13 +78,10 @@ class SER_sent_extract_V2:
                 
         return predictions
     
-    def predict_all_documents(self, documents):
-        all_predictions = []
-        for document in tqdm(documents):
-            items = [item for document in documents for item in get_item(document)]
-            predictions = predict(items)
-            all_predictions.append(predictions)
-        return all_predictions
+    def predict_document(self, document):
+        items = [item for document in documents for item in get_item(document)]
+        predictions = predict(items)
+        return predictions
     
     
 class SER_context_extract_V1:

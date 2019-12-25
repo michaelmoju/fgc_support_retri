@@ -422,8 +422,10 @@ class BertSentenceSupModel_V2(BertPreTrainedModel):
             if score >= threshold:
                 prediction.append(i)
                 
-        if len(prediction)<3:
-            score_list.sort(key=lambda item: item[1], reverse=True)
-            prediction = [i for i,score in score_list[:1]]
+#         if len(prediction)<3:
+#             score_list.sort(key=lambda item: item[1], reverse=True)
+#             prediction = [i for i,score in score_list[:1]]
+        if not prediction:
+            prediction.append(max_i)
             
         return prediction
