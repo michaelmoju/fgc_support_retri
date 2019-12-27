@@ -1,4 +1,3 @@
-import torch
 import torchvision
 from transformers import BertModel, BertTokenizer
 from tqdm import tqdm
@@ -26,22 +25,19 @@ class SER_sent_extract_V1:
         self.model = model
         self.bert_indexer = bert_indexer
         self.device = device
-        
-    def predict(self, context_sents, question):
-        batch = []
-        for sent in context_sents:
-            sample = self.bert_indexer({'QTEXT':question, 'sentence': sent['text']})
-            batch.append(sample)
-        batch = bert_sentV1_collate(batch)
-        with torch.no_grad():
-            input_ids = batch['input_ids'].to(self.device)
-            token_type_ids = batch['token_type_ids'].to(self.device)
-            attention_mask = batch['attention_mask'].to(self.device)
-            logits = self.model(input_ids=input_ids,
-                                token_type_ids=token_type_ids,
-                                attention_mask=attention_mask,
-                                mode=BertSentenceSupModel_V1.ForwardMode.EVAL)
-        return logits
+
+    def predict(self, items):
+        predictions = []
+        for item in items:
+            with torch.no_grad():
+                train_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([BertSentV1Idx(self.tokenizer)]))
+                batch = bert_sentV1_collate([sample for sample in train_set])
+                for key in ['input_ids', 'token_type_ids', 'attention_mask']:
+                    batch[key] = batch[key].to(self.device)
+                prediction = self.model.predict(batch, threshold=0.03)
+                predictions.append(prediction)
+    
+        return predictions
 
 
 class SER_sent_extract_V2:

@@ -1,12 +1,8 @@
 import os
 from tqdm import tqdm
 import math
-import torch
-import torch.nn as nn
 import torchvision
 from torch.utils.data import DataLoader
-
-from transformers import BertModel
 from transformers.tokenization_bert import BertTokenizer
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
@@ -208,7 +204,7 @@ def train_BertContextSupModel_V3(num_epochs, batch_size, model_file_name):
                        str(trained_model_path / "model_epoch{0}_eval_recall_{1:.3f}_f1_{2:.3f}.m".format(epoch_i, recall, f1)))
 
 
-def train_context_model(num_epochs, batch_size, model_file_name):
+def train_BertContextSupModel_V2(num_epochs, batch_size, model_file_name):
         
     torch.manual_seed(12)
     bert_model_name = config.BERT_EMBEDDING
@@ -304,7 +300,7 @@ def train_context_model(num_epochs, batch_size, model_file_name):
                        str(trained_model_path / "model_epoch{0}_loss_{1:.3f}.m".format(epoch_i, aver_loss)))
 
 
-def train_BertSupTagModel(num_epochs, batch_size, model_file_name):
+def train_BertContextSupModel_V1(num_epochs, batch_size, model_file_name):
         
     torch.manual_seed(12)
     bert_model_name = config.BERT_EMBEDDING
@@ -413,19 +409,17 @@ def train_BertSupTagModel(num_epochs, batch_size, model_file_name):
                        str(trained_model_path / "model_epoch{0}_eval_recall_{1:.3f}_f1{2:.3f}.m".format(epoch_i, recall, f1)))
 
 
-def train_sentence_model():
-    
+def train_sentence_model_V1(num_epochs, batch_size, model_file_name):
+
     torch.manual_seed(12)
     bert_model_name = config.BERT_EMBEDDING
     warmup_proportion = 0.1
-    learning_rate = 2e-5
-    num_epochs = 50
+    learning_rate = 5e-5
     eval_frequency = 5
-    batch_size = 16
-    
-    if not os.path.exists(config.TRAINED_MODEL_PATH):
-        os.mkdir(config.TRAINED_MODEL_PATH)
-    trained_model_path = config.TRAINED_MODEL_PATH
+
+    trained_model_path = config.TRAINED_MODELS / model_file_name
+    if not os.path.exists(trained_model_path):
+        os.mkdir(trained_model_path)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n_gpu = torch.cuda.device_count()
@@ -452,14 +446,12 @@ def train_sentence_model():
     dev_items = read_fgc(config.FGC_DEV, eval=True)
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
-    train_set = SerSentenceDataset(train_items, transform=torchvision.transforms.Compose([BertSentV1Idx(tokenizer)]))
-    dev_set = SerSentenceDataset(dev_items, transform=torchvision.transforms.Compose([BertSentV1Idx(tokenizer)]))
+    dev_set = SerSentenceDataset(train_items, transform=torchvision.transforms.Compose([BertSentV1Idx(tokenizer)]))
     
-    dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=bert_sentV1_collate)
-    dataloader_dev = DataLoader(dev_set, batch_size=64, collate_fn=bert_sentV1_collate)
+    dataloader_train = DataLoader(dev_set, batch_size=batch_size, shuffle=True, collate_fn=bert_sentV1_collate)
     
     optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate)
-    num_train_optimization_steps = int(math.ceil(len(train_set) / batch_size)) * num_epochs
+    num_train_optimization_steps = int(math.ceil(len(dev_set) / batch_size)) * num_epochs
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=int(num_train_optimization_steps*warmup_proportion),
                                                 num_training_steps=num_train_optimization_steps)
     
@@ -469,6 +461,7 @@ def train_sentence_model():
         running_loss = 0.0
         for batch_i, batch in enumerate(tqdm(dataloader_train)):
             optimizer.zero_grad()
+            
             input_ids = batch['input_ids'].to(device)
             token_type_ids = batch['token_type_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
@@ -491,27 +484,26 @@ def train_sentence_model():
         if epoch_i % eval_frequency == 0:
             model.eval()
 
-            accum_loss = 0
             with torch.no_grad():
-                for batch in dataloader_dev:
-                    input_ids = batch['input_ids'].to(device)
-                    token_type_ids = batch['token_type_ids'].to(device)
-                    attention_mask = batch['attention_mask'].to(device)
-                    labels = batch['label'].to(device)
-                    loss = model(input_ids, token_type_ids=token_type_ids,
-                                 attention_mask=attention_mask, mode=BertSentenceSupModel_V1.ForwardMode.TRAIN,
-                                 labels=labels)
-                    if n_gpu > 1:
-                        loss = loss.mean()
-                    accum_loss += loss
-            aver_loss = accum_loss / len(dataloader_dev)
-            print('epoch %d eval_loss: %.3f' % (epoch_i, aver_loss))
+                predictions = []
+                for item in dev_items:
+                    dev_set = SerSentenceDataset([item],
+                                                   transform=torchvision.transforms.Compose([BertSentV1Idx(tokenizer)]))
+                    batch = bert_sentV1_collate([sample for sample in dev_set])
+                    for key in ['input_ids', 'token_type_ids', 'attention_mask']:
+                        batch[key] = batch[key].to(device)
+    
+                    prediction = model.module.predict(batch)
+                    predictions.append(prediction)
 
-            model_to_save = model.module if hasattr(model, 'module') else model
-            torch.save(model_to_save.state_dict(), str(trained_model_path/ "model_epoch{0}_loss_{1:.3f}.m".format(epoch_i, aver_loss)))
-            
+                precision, recall, f1 = evalaluate_f1(dev_items, predictions)
+                print('epoch %d eval_recall: %.3f eval_f1: %.3f' % (epoch_i, recall, f1))
 
-def train_sentence_model_2(num_epochs, batch_size, model_file_name):
+                model_to_save = model.module if hasattr(model, 'module') else model
+                torch.save(model_to_save.state_dict(),
+                           str(trained_model_path / "model_epoch{0}_eval_recall_{1:.3f}_f1_{2:.3f}.m".format(epoch_i, recall, f1)))
+
+def train_sentence_model_V2(num_epochs, batch_size, model_file_name):
     
     torch.manual_seed(12)
     bert_model_name = config.BERT_EMBEDDING
@@ -548,12 +540,12 @@ def train_sentence_model_2(num_epochs, batch_size, model_file_name):
     dev_items = fgc_dev_items
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
-    train_set = SerSentenceDataset(train_items, transform=torchvision.transforms.Compose([BertSentV2Idx(tokenizer)]))
+    dev_set = SerSentenceDataset(train_items, transform=torchvision.transforms.Compose([BertSentV2Idx(tokenizer)]))
     
-    dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=bert_sentV2_collate)
+    dataloader_train = DataLoader(dev_set, batch_size=batch_size, shuffle=True, collate_fn=bert_sentV2_collate)
     
     optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate)
-    num_train_optimization_steps = int(math.ceil(len(train_set) / batch_size)) * num_epochs
+    num_train_optimization_steps = int(math.ceil(len(dev_set) / batch_size)) * num_epochs
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=int(num_train_optimization_steps*warmup_proportion),
                                                 num_training_steps=num_train_optimization_steps)
     
@@ -586,8 +578,8 @@ def train_sentence_model_2(num_epochs, batch_size, model_file_name):
             with torch.no_grad():
                 predictions = []
                 for item in dev_items:
-                    train_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([BertSentV2Idx(tokenizer)]))
-                    batch = bert_sentV2_collate([sample for sample in train_set])
+                    dev_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([BertSentV2Idx(tokenizer)]))
+                    batch = bert_sentV2_collate([sample for sample in dev_set])
                     for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type']:
                         batch[key] = batch[key].to(device)
 
