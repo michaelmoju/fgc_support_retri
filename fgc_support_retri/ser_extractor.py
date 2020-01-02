@@ -16,7 +16,8 @@ class SER_sent_extract_V1:
         bert_indexer = BertSentV1Idx(bert_tokenizer)
         model = BertSentenceSupModel_V1(bert_encoder)
 #         model_path = config.TRAINED_MODELS / '20191129-with_hotpot'/ 'model_epoch5_loss_0.226.m'
-        model_path = config.TRAINED_MODELS / '20191128'/ 'model_epoch5_loss_0.213.m' 
+#         model_path = config.TRAINED_MODELS / '20191128'/ 'model_epoch5_loss_0.213.m' 
+        model_path = config.TRAINED_MODELS / '20200102_sent_V1' / 'model_epoch10_eval_recall_0.025_f1_0.034.m'
         model.load_state_dict(torch.load(model_path, map_location=device))
         model.to(device)
         model.eval()
@@ -28,13 +29,13 @@ class SER_sent_extract_V1:
 
     def predict(self, items):
         predictions = []
-        for item in items:
+        for item in tqdm(items):
             with torch.no_grad():
                 train_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([BertSentV1Idx(self.tokenizer)]))
                 batch = bert_sentV1_collate([sample for sample in train_set])
                 for key in ['input_ids', 'token_type_ids', 'attention_mask']:
                     batch[key] = batch[key].to(self.device)
-                prediction = self.model.predict(batch, threshold=0.03)
+                prediction = self.model.predict(batch, threshold=0.5)
                 predictions.append(prediction)
     
         return predictions
@@ -72,7 +73,7 @@ class SER_sent_extract_V2:
                 batch = bert_sentV2_collate([sample for sample in train_set])
                 for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type']:
                     batch[key] = batch[key].to(self.device)
-                prediction = self.model.predict(batch, threshold=0.03)
+                prediction = self.model.predict(batch, threshold=0.5)
                 predictions.append(prediction)
                 
         return predictions

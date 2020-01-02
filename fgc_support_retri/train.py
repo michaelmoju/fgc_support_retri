@@ -440,18 +440,19 @@ def train_sentence_model_V1(num_epochs, batch_size, model_file_name):
     ]
     
     # read data
-    fgc_items = read_fgc(config.FGC_TRAIN, eval=True)
-    hotpot_items = read_hotpot(config.HOTPOT_DEV, eval=True)
-    train_items = fgc_items + hotpot_items
-    dev_items = read_fgc(config.FGC_DEV, eval=True)
+    fgc_train_items = read_fgc(config.FGC_TRAIN)
+    fgc_dev_items = read_fgc(config.FGC_DEV)
+    fgc_test_items = read_fgc(config.FGC_TEST)
+    train_items = fgc_train_items
+    dev_items = fgc_dev_items
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
-    dev_set = SerSentenceDataset(train_items, transform=torchvision.transforms.Compose([BertSentV1Idx(tokenizer)]))
+    train_set = SerSentenceDataset(train_items, transform=torchvision.transforms.Compose([BertSentV1Idx(tokenizer)]))
     
-    dataloader_train = DataLoader(dev_set, batch_size=batch_size, shuffle=True, collate_fn=bert_sentV1_collate)
+    dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=bert_sentV1_collate)
     
     optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate)
-    num_train_optimization_steps = int(math.ceil(len(dev_set) / batch_size)) * num_epochs
+    num_train_optimization_steps = int(math.ceil(len(train_set) / batch_size)) * num_epochs
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=int(num_train_optimization_steps*warmup_proportion),
                                                 num_training_steps=num_train_optimization_steps)
     
@@ -462,14 +463,11 @@ def train_sentence_model_V1(num_epochs, batch_size, model_file_name):
         for batch_i, batch in enumerate(tqdm(dataloader_train)):
             optimizer.zero_grad()
             
-            input_ids = batch['input_ids'].to(device)
-            token_type_ids = batch['token_type_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['label'].to(device)
-
-            loss = model(input_ids, token_type_ids=token_type_ids,
-                         attention_mask=attention_mask, mode=BertSentenceSupModel_V1.ForwardMode.TRAIN,
-                         labels=labels)
+            for key in ['input_ids', 'token_type_ids', 'attention_mask']:
+                batch[key] = batch[key].to(device)
+                
+            batch['label'] = batch['label'].to(dtype=torch.float, device=device)
+            loss = model(batch)
 
             if n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu.

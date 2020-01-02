@@ -16,7 +16,7 @@ class BertSentenceSupModel_V1(nn.Module):
         self.criterion = nn.BCEWithLogitsLoss()
         
     def forward_nn(self, input_ids, token_type_ids=None, attention_mask=None):
-        _, q_poolout = self.bert(input_ids, token_type_ids, attention_mask)
+        _, q_poolout = self.bert_encoder(input_ids, token_type_ids, attention_mask)
         hidden = self.linear1(q_poolout)
         logits = self.linear2(hidden)
         logits = logits.squeeze(-1)
