@@ -18,4 +18,4 @@ TRAINED_MODELS = RESULT_PATH / "trainedmodels"
 TRAINED_MODEL_PATH = TRAINED_MODELS / ""
 # BERT_EMBEDDING = DATA_ROOT / "bert_chinese_total"
 BERT_EMBEDDING = "bert-base-chinese"
-
+BERT_EMBEDDING_ZH = "bert-base-chinese"

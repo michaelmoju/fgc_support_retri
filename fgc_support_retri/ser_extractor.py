@@ -1,10 +1,10 @@
 import torchvision
-from transformers import BertModel, BertTokenizer
+from transformers import BertTokenizer
 from tqdm import tqdm
 
 from . import config
-from .model import *
-from .fgc_preprocess import *
+from nn_model.model import *
+from dataset_reader.fgc_preprocess import *
 
 
 class SER_sent_extract_V1:
@@ -140,7 +140,7 @@ class SER_context_extract_V2:
         model.to(device)
         model.eval()
         
-        self.indexer = BertV2Idx(bert_tokenizer)
+        self.indexer = BertContextV2Idx(bert_tokenizer)
         self.model = model
         self.device = device
         
