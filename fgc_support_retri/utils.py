@@ -56,7 +56,7 @@ def read_hotpot(fp, eval=False):
 def read_fgc(fp, eval=False):
     def get_item(document):
         for question in document['QUESTIONS']:
-            if not question['SHINT']:
+            if 'SHINT' not in question.keys():
                 print("no gold supporting evidence")
                 print(question)
                 continue
@@ -66,6 +66,7 @@ def read_fgc(fp, eval=False):
 
     with open(fp) as f:
         documents = json.load(f)
+    print(len(documents))
     
     # each item is a context and a question
     items = [item for document in documents for item in get_item(document)]

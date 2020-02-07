@@ -47,7 +47,6 @@ def train_EMSERModel(num_epochs, batch_size, model_file_name, model_mode):
     # read data
     train_items = read_fgc(config.FGC_TRAIN)
     dev_items = read_fgc(config.FGC_DEV)
-    test_items = read_fgc(config.FGC_TEST)
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
     train_set = SerSentenceDataset(train_items, transform=torchvision.transforms.Compose([EMIdx(tokenizer)]))
