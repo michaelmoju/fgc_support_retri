@@ -216,6 +216,11 @@ class EMSERModel(BertPreTrainedModel):
 		scores = torch.sigmoid(logits)
 		scores = scores.cpu().numpy().tolist()
 		return scores
+    
+    def predict_score(self, batch):
+        logits = self.forward_nn(batch)
+        scores = self._predict(logits)
+        return scores
 	
 	def predict_hotpot(self, batch, threshold=0.5):
 		logits = self.forward_nn(batch)

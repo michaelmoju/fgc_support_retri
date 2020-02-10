@@ -3,11 +3,11 @@ from transformers import BertTokenizer
 from tqdm import tqdm
 
 from . import config
-from nn_model.model import *
 from dataset_reader.sentence_reader import *
 from dataset_reader.context_reader import *
 from nn_model.context_model import *
 from nn_model.sentence_model import *
+from nn_model.em_model import EMSERModel
 
 
 class SER_sent_extract_V1:
@@ -49,9 +49,8 @@ class EMSER_extract:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         bert_model_name = config.BERT_EMBEDDING_ZH
         bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
-        bert_indexer = BertSentV1Idx(bert_tokenizer)
         model = EMSERModel.from_pretrained(bert_model_name)
-        model_path = config.TRAINED_MODELS / '20191219_test2' / 'model_epoch20_eval_recall_0.524_f1_0.465.m'
+        model_path = config.TRAINED_MODELS / '20200207_emmodel_advance' / 'model_epoch7_eval_recall_0.537_f1_0.487.m'
         model.load_state_dict(torch.load(model_path, map_location=device))
         model.to_mode(model_mode)
         model.to(device)
@@ -81,6 +80,15 @@ class EMSER_extract:
                 predictions.append(prediction)
                 
         return predictions
+    
+    def predict_score(self, item):
+        with torch.no_grad():
+            train_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([EMIdx(self.tokenizer)]))
+            batch = EM_collate([sample for sample in train_set])
+            for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type']:
+                batch[key] = batch[key].to(self.device)
+            score_list = self.model.predict_score(batch)
+        return score_list
     
     def predict_all_documents(self, documents):
         all_predictions = []

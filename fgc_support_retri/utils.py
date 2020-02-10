@@ -60,6 +60,10 @@ def read_fgc(fp, eval=False):
                 print("no gold supporting evidence")
                 print(question)
                 continue
+            if not question['SHINT']:
+                print("no gold supporting evidence")
+                print(question)
+                continue
             out = {'QID': question['QID'], 'SENTS': document['SENTS'], 'SUP_EVIDENCE': question['SHINT'],
                    'QTEXT': question['QTEXT'], 'ANS': question['ANSWER'][0]['ATEXT'], 'ASPAN': question['ASPAN']}
             yield out
@@ -92,3 +96,13 @@ def read_fgc(fp, eval=False):
         print("{} supporting evidence sentences/question".format(sup_evidence_num/len(items)))
 
     return items
+
+
+def json_load(fp):
+    with open(fp) as f:
+        return json.load(f)
+
+
+def json_write(out, out_fp):
+    with open(out_fp, 'w') as f:
+        json.dump(out, out_fp, indent=4, ensure_ascii=False)
