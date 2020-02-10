@@ -13,7 +13,7 @@ from dataset_reader.sentence_reader import *
 from nn_model.context_model import *
 from nn_model.sentence_model import *
 from nn_model.em_model import EMSERModel
-from .eval import evalaluate_f1
+from .eval_old import evalaluate_f1
 from evaluation.eval import eval_sp_fgc
 
 

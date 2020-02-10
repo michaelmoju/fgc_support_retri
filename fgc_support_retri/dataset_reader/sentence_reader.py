@@ -15,16 +15,14 @@ class SerSentenceDataset(Dataset):
 					other_context += context_s['text']
 			out = {'QTEXT': item['QTEXT'], 'sentence': sentence['text'], 'other_context': other_context}
 			
-			if 'SUP_EVIDENCE' in item.keys():
-				assert len(item['SUP_EVIDENCE']) > 0
+			if item['SUP_EVIDENCE']:
 				if target_i in item['SUP_EVIDENCE']:
 					out['label'] = 1
 				else:
 					out['label'] = 0
-			
-			yield out
-	
-	def __init__(self, items, transform=None):
+                yield out
+    
+    def __init__(self, items, transform=None):
 		instances = []
 		for item in items:
 			for instance in self.get_sentence_pair(item):
