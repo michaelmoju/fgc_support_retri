@@ -88,7 +88,7 @@ def train_EMSERModel(num_epochs, batch_size, model_file_name, model_mode):
                 predictions = []
                 for item in tqdm(dev_items):
                     dev_set = SerSentenceDataset([item],
-                                                 transform=torchvision.transforms.Compose([BertSentV2Idx(tokenizer)]))
+                                                 transform=torchvision.transforms.Compose([EMIdx(tokenizer)]))
                     batch = EM_collate([sample for sample in dev_set])
                     for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type']:
                         batch[key] = batch[key].to(device)

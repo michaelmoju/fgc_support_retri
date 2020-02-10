@@ -4,7 +4,10 @@ from tqdm import tqdm
 
 from . import config
 from nn_model.model import *
-from dataset_reader.fgc_preprocess import *
+from dataset_reader.sentence_reader import *
+from dataset_reader.context_reader import *
+from nn_model.context_model import *
+from nn_model.sentence_model import *
 
 
 class SER_sent_extract_V1:
@@ -41,15 +44,16 @@ class SER_sent_extract_V1:
         return predictions
 
 
-class SER_sent_extract_V2:
-    def __init__(self):
+class EMSER_extract:
+    def __init__(self, model_mode):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        bert_model_name = config.BERT_EMBEDDING
+        bert_model_name = config.BERT_EMBEDDING_ZH
         bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
         bert_indexer = BertSentV1Idx(bert_tokenizer)
-        model = BertSentenceSupModel_V2.from_pretrained(bert_model_name)
+        model = EMSERModel.from_pretrained(bert_model_name)
         model_path = config.TRAINED_MODELS / '20191219_test2' / 'model_epoch20_eval_recall_0.524_f1_0.465.m'
         model.load_state_dict(torch.load(model_path, map_location=device))
+        model.to_mode(model_mode)
         model.to(device)
         model.eval()
         
@@ -69,11 +73,11 @@ class SER_sent_extract_V2:
         predictions = []
         for item in items:
             with torch.no_grad():
-                train_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([BertSentV2Idx(self.tokenizer)]))
-                batch = bert_sentV2_collate([sample for sample in train_set])
+                train_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([EMIdx(self.tokenizer)]))
+                batch = EM_collate([sample for sample in train_set])
                 for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type']:
                     batch[key] = batch[key].to(self.device)
-                prediction = self.model.predict(batch, threshold=0.5)
+                prediction = self.model.predict_fgc(batch)
                 predictions.append(prediction)
                 
         return predictions
