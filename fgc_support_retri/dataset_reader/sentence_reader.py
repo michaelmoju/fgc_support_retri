@@ -13,14 +13,14 @@ class SerSentenceDataset(Dataset):
             for context_i, context_s in enumerate(item['SENTS']):
                 if target_i != context_i:
                     other_context += context_s['text']
-            out = {'QTEXT': item['QTEXT'], 'sentence': sentence['text'], 'other_context': other_context}
+            out = {'QID': item['QID'], 'QTEXT': item['QTEXT'], 'sentence': sentence['text'], 'other_context': other_context}
             
             if item['SUP_EVIDENCE']:
                 if target_i in item['SUP_EVIDENCE']:
                     out['label'] = 1
                 else:
                     out['label'] = 0
-                yield out
+            yield out
 
     def __init__(self, items, transform=None):
         instances = []
@@ -78,9 +78,9 @@ class EMIdx:
         idf_match = [0] + idf_match_q + [0] + idf_match_s
         if len(tokenized_all) > 511:
             print("tokenized all > 511 id:{}".format(sample['QID']))
-            tokenized_all = tokenized_all[:512]
-            tf_match = tf_match[:512]
-            idf_match = idf_match[:512]
+            tokenized_all = tokenized_all[:511]
+            tf_match = tf_match[:511]
+            idf_match = idf_match[:511]
         tokenized_all += ['[SEP]']
         tf_match += [0]
         idf_match += [0]
@@ -90,7 +90,7 @@ class EMIdx:
             print(ids_all)
             print(sample)
         sample['input_ids'] = ids_all
-        sample['token_type_ids'] = [0] * len(tokenized_q) + [1] * (len(tokenized_s) + 1)
+        sample['token_type_ids'] = [0] * len(tokenized_q) + [1] * (len(tokenized_all) - len(tokenized_q))
         sample['attention_mask'] = [1] * len(ids_all)
         sample['tf_match'] = tf_match
         sample['idf_match'] = idf_match

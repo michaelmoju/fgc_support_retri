@@ -105,4 +105,4 @@ def json_load(fp):
 
 def json_write(out, out_fp):
     with open(out_fp, 'w') as f:
-        json.dump(out, out_fp, indent=4, ensure_ascii=False)
+        json.dump(out, f, indent=4, ensure_ascii=False)

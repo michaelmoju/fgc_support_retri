@@ -58,14 +58,13 @@ class EMSER_extract:
         
         self.tokenizer = bert_tokenizer
         self.model = model
-        self.bert_indexer = bert_indexer
         self.device = device
     
     @staticmethod
     def get_item(document):
         for question in document['QUESTIONS']:
             out = {'QID': question['QID'], 'SENTS': document['SENTS'],
-                   'QTEXT': question['QTEXT'], 'ANS': question['ANSWER'][0]['ATEXT'], 'ASPAN': question['ASPAN']}
+                   'QTEXT': question['QTEXT_CN'], 'SUP_EVIDENCE': []}
             yield out
     
     def predict(self, items):
