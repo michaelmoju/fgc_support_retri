@@ -16,14 +16,14 @@ class BertEmbeddingsPlus(nn.Module):
 		self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 		self.tf_embeddings = nn.Embedding(2, config.hidden_size)
 		self.idf_embeddings = nn.Embedding(2, config.hidden_size)
+		self.sf_type_embeddings = nn.Embedding(20, config.hidden_size)
 		self.qsim_embeddings = nn.Embedding(20, config.hidden_size)
-		self.dsim_embeddings = nn.Embedding(20, config.hidden_size)
 		
 		self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 		self.dropout = nn.Dropout(config.hidden_dropout_prob)
 	
 	def forward(self, input_ids, token_type_ids=None, position_ids=None, inputs_embeds=None, tf_type=None,
-	            idf_type=None, qsim_type=None, dsim_type=None):
+	            idf_type=None, sf_type_ids=None, qsim_type_ids=None):
 		if input_ids is not None:
 			input_shape = input_ids.size()
 		else:
@@ -42,10 +42,10 @@ class BertEmbeddingsPlus(nn.Module):
 		if idf_type is None:
 			idf_type = torch.zeros(input_shape, dtype=torch.long, device=device)
 		
-		if qsim_type is None:
-			qsim_type = torch.zeros(input_shape, dtype=torch.long, device=device)
-		if dsim_type is None:
-			dsim_type = torch.zeros(input_shape, dtype=torch.long, device=device)
+		if sf_type_ids is None:
+			sf_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+		if qsim_type_ids is None:
+			qsim_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 			
 		if inputs_embeds is None:
 			inputs_embeds = self.word_embeddings(input_ids)
@@ -54,8 +54,8 @@ class BertEmbeddingsPlus(nn.Module):
 		token_type_embeddings = self.token_type_embeddings((token_type_ids > 0).long())
 		tf_embeddings = self.tf_embeddings((tf_type > 0).long())
 		idf_embeddings = self.idf_embeddings((idf_type > 0).long())
-		qsim_embeddings = self.qsim_embeddings(qsim_type.long())
-		dsim_embeddings = self.dsim_embeddings(dsim_type.long())
+		sf_type_embeddings = self.sf_type_embeddings(sf_type_ids.long())
+		qsim_embeddings = self.qsim_embeddings(qsim_type_ids.long())
 		
 		embeddings = (
 				inputs_embeds
@@ -63,8 +63,8 @@ class BertEmbeddingsPlus(nn.Module):
 				+ token_type_embeddings
 				+ tf_embeddings
 				+ idf_embeddings
+				+ sf_type_embeddings
 				+ qsim_embeddings
-				+ dsim_embeddings
 		)
 		
 		embeddings = self.LayerNorm(embeddings)
@@ -82,7 +82,7 @@ class BertModelPlus(BertModel):
 	
 	def forward(self, input_ids=None, tf_type=None, idf_type=None,
 	            token_type_ids=None, attention_mask=None, position_ids=None,
-	            qsim_type_ids=None, dsim_type_ids=None,
+	            sf_type_ids=None, qsim_type_ids=None,
 	            head_mask=None, inputs_embeds=None, encoder_hidden_states=None, encoder_attention_mask=None):
 		
 		if input_ids is not None and inputs_embeds is not None:
@@ -169,7 +169,7 @@ class BertModelPlus(BertModel):
 		embedding_output = self.embeddings(input_ids=input_ids, tf_type=tf_type, idf_type=idf_type,
 		                                   position_ids=position_ids, token_type_ids=token_type_ids,
 		                                   inputs_embeds=inputs_embeds,
-		                                   qsim_type_ids=qsim_type_ids, dsim_type_ids=dsim_type_ids)
+		                                   sf_type_ids=sf_type_ids, qsim_type_ids=qsim_type_ids)
 		encoder_outputs = self.encoder(embedding_output,
 		                               attention_mask=extended_attention_mask,
 		                               head_mask=head_mask,
@@ -216,7 +216,7 @@ class SynSERModel(BertPreTrainedModel):
 			_, q_poolout = self.bert(batch['input_ids'], batch['tf_type'], batch['idf_type'],
 			                         token_type_ids=batch['token_type_ids'],
 			                         attention_mask=batch['attention_mask'],
-			                         qsim_type_ids=batch['qsim_type'], dsim_type_ids=batch['dsim_type'])
+			                         sf_type_ids=batch['sf_type'], qsim_type_ids=batch['qsim_type'])
 		else:
 			raise Exception("mode error: {}".format(self.mode))
 		
