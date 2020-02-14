@@ -7,6 +7,10 @@ PROJ_ROOT = SRC_ROOT.parent
 DATA_ROOT = PROJ_ROOT / "data"
 RESULT_PATH = PROJ_ROOT / "results"
 
+# IJCAI-2020 FGC dataset
+# FGC_DEV = DATA_ROOT / "FGC" / "1.5" / "FGC_release_all_dev(cn).json"
+# FGC_TRAIN = DATA_ROOT / "FGC" / "1.5" / "FGC_release_all_train(cn).json"
+# FGC_TEST = DATA_ROOT / "FGC" / "1.5" / "FGC_release_all_test(cn).json"
 FGC_DEV = DATA_ROOT / "FGC" / "FGC_release_1.7.1" / "FGC_release_all_dev.json"
 FGC_TRAIN = DATA_ROOT / "FGC" / "FGC_release_1.7.1" / "FGC_release_all_train.json"
 FGC_TEST = DATA_ROOT / "FGC" / "FGC_release_1.7.1" / "FGC_release_all_test.json"
