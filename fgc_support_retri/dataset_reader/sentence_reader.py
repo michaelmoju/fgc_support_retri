@@ -3,6 +3,10 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 import torch.nn.functional as F
 
+ATYPE_LIST = ['Person', 'Date-Duration', 'Location', 'Organization',
+              'Num-Measure', 'YesNo', 'Kinship', 'Event', 'Object', 'Misc']
+ATYPE2id = {type: idx for idx, type in enumerate(ATYPE_LIST)}
+id2ATYPE = {v: k for k, v in ATYPE2id.items()}
 
 class SerSentenceDataset(Dataset):
     "Supporting evidence dataset"
@@ -17,13 +21,15 @@ class SerSentenceDataset(Dataset):
                     other_context += context_s['text']
                     context_sents.append(context_s['text'])
             out = {'QID': item['QID'], 'QTEXT': item['QTEXT'], 'sentence': sentence['text'],
-                   'other_context': other_context, 'context_sents': context_sents}
+                   'other_context': other_context, 'context_sents': context_sents,
+                   'atype': item['ATYPE']}
             
             if item['SUP_EVIDENCE']:
                 if target_i in item['SUP_EVIDENCE']:
                     out['label'] = 1
                 else:
                     out['label'] = 0
+                    
             yield out
 
     def __init__(self, items, transform=None):
@@ -226,6 +232,11 @@ class SynIdx:
             sf_type = sf_type[:511]
             qsim_type = qsim_type[:511]
             
+        if len(tokenized_q) > 511:
+            print("tokenized question > 511 id:{}".format(sample['QID']))
+            tokenized_q = tokenized_q[:511]
+            tokenized_q += ['[SEP]']
+            
         tokenized_all += ['[SEP]']
         tf_match += [0]
         idf_match += [0]
@@ -233,22 +244,31 @@ class SynIdx:
         qsim_type += [0]
         
         ids_all = self.tokenizer.convert_tokens_to_ids(tokenized_all)
+        ids_q = self.tokenizer.convert_tokens_to_ids(tokenized_q)
         if not ids_all:
             print(ids_all)
             print(sample)
+
+        atype_label = None
+        if sample['atype']:
+            atype_label = ATYPE2id[sample['atype']]
+            
         sample['input_ids'] = ids_all
+        sample['question_ids'] = ids_q
         sample['token_type_ids'] = [0] * len(tokenized_q) + [1] * (len(tokenized_all) - len(tokenized_q))
         sample['attention_mask'] = [1] * len(ids_all)
         sample['tf_match'] = tf_match
         sample['idf_match'] = idf_match
         sample['sf_type'] = sf_type
         sample['qsim_type'] = qsim_type
+        sample['atype_label'] = atype_label
         
         return sample
  
   
 def Syn_collate(batch):
     input_ids_batch = pad_sequence([torch.tensor(sample['input_ids']) for sample in batch], batch_first=True)
+    question_ids_batch = pad_sequence([torch.tensor(sample['question_ids']) for sample in batch], batch_first=True)
     token_type_ids_batch = pad_sequence([torch.tensor(sample['token_type_ids']) for sample in batch], batch_first=True)
     attention_mask_batch = pad_sequence([torch.tensor(sample['attention_mask']) for sample in batch], batch_first=True)
     tf_match = pad_sequence([torch.tensor(sample['tf_match']) for sample in batch], batch_first=True)
@@ -256,13 +276,17 @@ def Syn_collate(batch):
     sf_type = pad_sequence([torch.tensor(sample['sf_type']) for sample in batch], batch_first=True)
     qsim_type = pad_sequence([torch.tensor(sample['qsim_type']) for sample in batch], batch_first=True)
     
+    atype_label = torch.tensor([sample['atype_label'] for sample in batch])
+    
     out = {'input_ids': input_ids_batch,
+           'question_ids': question_ids_batch,
            'token_type_ids': token_type_ids_batch,
            'attention_mask': attention_mask_batch,
            'tf_type': tf_match,
            'idf_type': idf_match,
            'sf_type': sf_type,
-           'qsim_type': qsim_type}
+           'qsim_type': qsim_type,
+           'atype_label': atype_label}
     
     if 'label' in batch[0].keys():
         out['label'] = torch.tensor([sample['label'] for sample in batch])

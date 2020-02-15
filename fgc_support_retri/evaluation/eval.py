@@ -1,5 +1,17 @@
 import json
 
+def eval_fgc_atype(fgc_items, atypes):
+    
+    pos = 0
+    neg = 0
+    for item, atype in zip(fgc_items, atypes):
+        gold = item['ATYPE']
+        if atype == gold:
+            pos += 1
+        else:
+            neg += 1
+    return pos/len(atypes)
+
 def _update_sp(metrics, gold, pred):
     tp, fp, fn = 0, 0, 0
         
@@ -21,6 +33,7 @@ def _update_sp(metrics, gold, pred):
     metrics['sp_recall'] += recall
     
     return precision, recall, f1
+
 
 def eval_sp_fgc(fgc_items, predictions):
     metrics = {'sp_em': 0, 'sp_prec': 0, 'sp_recall': 0, 'sp_f1': 0}

@@ -65,7 +65,7 @@ def read_fgc(fp, eval=False):
                 print(question)
                 continue
             out = {'QID': question['QID'], 'SENTS': document['SENTS'], 'SUP_EVIDENCE': question['SHINT'],
-                   'QTEXT': question['QTEXT'], 'ANS': question['ANSWER'][0]['ATEXT'], 'ASPAN': question['ASPAN']}
+                   'QTEXT': question['QTEXT'], 'ANS': question['ANSWER'][0]['ATEXT'], 'ATYPE': question['ATYPE']}
             yield out
 
     with open(fp) as f:
