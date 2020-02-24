@@ -3,7 +3,7 @@ from tqdm import tqdm
 import math
 import torchvision
 from torch.utils.data import DataLoader
-from transformers.tokenization_bert import BertTokenizer
+from transformers.tokenization_bert import BertTokenizer, BertModel
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
 from . import config
@@ -70,7 +70,7 @@ def train_MultiSERModel(num_epochs, batch_size, model_file_name, model_mode):
         for batch_i, batch in enumerate(tqdm(dataloader_train)):
             optimizer.zero_grad()
             
-            for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type',
+            for key in ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type',
                         'qsim_type', 'atype_label', 'label']:
                 batch[key] = batch[key].to(device)
 
@@ -97,14 +97,16 @@ def train_MultiSERModel(num_epochs, batch_size, model_file_name, model_mode):
                                                  transform=torchvision.transforms.Compose(
                                                      [SynIdx(tokenizer, pretrained_bert)]))
                     batch = Syn_collate([sample for sample in dev_set])
-                    for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type',
+                    for key in ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type',
                                 'qsim_type', 'atype_label', 'label']:
                         batch[key] = batch[key].to(device)
                     
                     prediction, atype = model.module.predict_fgc(batch)
                     predictions.append(prediction)
-                    atypes.append(atype)
-                    
+                    for type_i in atype:
+                        assert type_i == atype[0]    
+                    atypes.append(atype[0])
+                
                 metrics = eval_sp_fgc(dev_items, predictions)
                 atype_accuracy = eval_fgc_atype(dev_items, atypes)
                 print('epoch %d eval_f1: %.3f atype_acc: %.3f' % (epoch_i, metrics['sp_f1'], atype_accuracy))

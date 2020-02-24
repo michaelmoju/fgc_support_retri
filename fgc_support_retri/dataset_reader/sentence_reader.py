@@ -261,7 +261,9 @@ class SynIdx:
         sample['idf_match'] = idf_match
         sample['sf_type'] = sf_type
         sample['qsim_type'] = qsim_type
-        sample['atype_label'] = atype_label
+        
+        if atype_label:
+            sample['atype_label'] = atype_label
         
         return sample
  
@@ -276,7 +278,6 @@ def Syn_collate(batch):
     sf_type = pad_sequence([torch.tensor(sample['sf_type']) for sample in batch], batch_first=True)
     qsim_type = pad_sequence([torch.tensor(sample['qsim_type']) for sample in batch], batch_first=True)
     
-    atype_label = torch.tensor([sample['atype_label'] for sample in batch])
     
     out = {'input_ids': input_ids_batch,
            'question_ids': question_ids_batch,
@@ -285,11 +286,13 @@ def Syn_collate(batch):
            'tf_type': tf_match,
            'idf_type': idf_match,
            'sf_type': sf_type,
-           'qsim_type': qsim_type,
-           'atype_label': atype_label}
+           'qsim_type': qsim_type}
     
     if 'label' in batch[0].keys():
         out['label'] = torch.tensor([sample['label'] for sample in batch])
+        
+    if 'atype_label' in batch[0].keys():
+        out['atype_label'] = torch.tensor([sample['atype_label'] for sample in batch])
     
     return out
 

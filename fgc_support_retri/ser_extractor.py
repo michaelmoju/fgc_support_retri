@@ -1,5 +1,5 @@
 import torchvision
-from transformers import BertTokenizer
+from transformers import BertTokenizer, BertModel
 from tqdm import tqdm
 
 from . import config
@@ -8,7 +8,131 @@ from dataset_reader.context_reader import *
 from nn_model.context_model import *
 from nn_model.sentence_model import *
 from nn_model.em_model import EMSERModel
+from nn_model.syn_model import SynSERModel
 
+
+class Syn_extractor:
+    def __init__(self, model_mode):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        bert_model_name = config.BERT_EMBEDDING_ZH
+        bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+        model = SynSERModel.from_pretrained(bert_model_name)
+        model_path = config.TRAINED_MODELS / '20200214_syn_all' / 'model_epoch6_eval_recall_0.537_f1_0.503.m'
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        model.to_mode(model_mode)
+        model.to(device)
+        model.eval()
+        
+        pretrained_bert = BertModel.from_pretrained(bert_model_name)
+        pretrained_bert.eval()
+        
+        self.tokenizer = bert_tokenizer
+        self.model = model
+        self.device = device
+        self.pretrained_bert = pretrained_bert
+    
+    @staticmethod
+    def get_item(document):
+        for question in document['QUESTIONS']:
+            out = {'QID': question['QID'], 'SENTS': document['SENTS'],
+                   'QTEXT': question['QTEXT_CN'], 'SUP_EVIDENCE': [], 'ATYPE': None}
+            yield out
+    
+    def predict(self, items):
+        predictions = []
+        for item in items:
+            with torch.no_grad():
+                train_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([SynIdx(self.tokenizer, self.pretrained_bert)]))
+                batch = Syn_collate([sample for sample in train_set])
+                for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type', 'qsim_type']:
+                    batch[key] = batch[key].to(self.device)
+                prediction = self.model.predict_fgc(batch)
+                predictions.append(prediction)
+                
+        return predictions
+    
+    def predict_score(self, item):
+        with torch.no_grad():
+            train_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([SynIdx(self.tokenizer, self.pretrained_bert)]))
+            batch = Syn_collate([sample for sample in train_set])
+            for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type', 'qsim_type']:
+                batch[key] = batch[key].to(self.device)
+            score_list = self.model.predict_score(batch)
+        return score_list
+    
+    def predict_all_documents(self, documents):
+        all_predictions = []
+        for document in tqdm(documents):
+            items = [item for item in self.get_item(document)]
+            predictions = self.predict(items)
+            all_predictions.append(predictions)
+        return all_predictions
+        
+
+
+class MultiTask_extractor:
+    def __init__(self, model_mode):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        bert_model_name = config.BERT_EMBEDDING_ZH
+        bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+        model = MultiSERModel.from_pretrained(bert_model_name)
+        model_path = config.TRAINED_MODELS / '20200215_multi_all' / 'model_epoch7_eval_f1_0.506_atype_0.920.m'
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        model.to_mode(model_mode)
+        model.to(device)
+        model.eval()
+        
+        pretrained_bert = BertModel.from_pretrained(bert_model_name)
+        pretrained_bert.eval()
+        
+        self.tokenizer = bert_tokenizer
+        self.pretrained_bert = pretrained_bert
+        self.model = model
+        self.device = device
+    
+    @staticmethod
+    def get_item(document):
+        for question in document['QUESTIONS']:
+            out = {'QID': question['QID'], 'SENTS': document['SENTS'],
+                   'QTEXT': question['QTEXT_CN'], 'SUP_EVIDENCE': [], 'ATYPE': None}
+            yield out
+    
+    def predict(self, items):
+        predictions = []
+        atypes = []
+        for item in items:
+            with torch.no_grad():
+                train_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([SynIdx(self.tokenizer, self.pretrained_bert)]))
+                batch = Syn_collate([sample for sample in train_set])
+                for key in ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type',
+                                'qsim_type']:
+                    batch[key] = batch[key].to(self.device)
+                prediction, atype = self.model.predict_fgc(batch)
+                predictions.append(prediction)
+                for type_i in atype:
+                    assert type_i == atype[0]
+                atypes.append(atype[0])
+                
+        return predictions, atypes
+    
+    def predict_score(self, item):
+        with torch.no_grad():
+            train_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([SynIdx(self.tokenizer, self.pretrained_bert)]))
+            batch = Syn_collate([sample for sample in train_set])
+            for key in ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type',
+                                'qsim_type']:
+                batch[key] = batch[key].to(self.device)
+            score_list = self.model.predict_score(batch)
+        return score_list
+    
+    def predict_all_documents(self, documents):
+        all_predictions = []
+        for document in tqdm(documents):
+            items = [item for item in self.get_item(document)]
+            predictions, atypes = self.predict(items)
+            all_predictions.append(predictions)
+        return all_predictions
+    
 
 class SER_sent_extract_V1:
     def __init__(self):
