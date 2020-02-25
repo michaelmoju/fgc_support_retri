@@ -8,6 +8,7 @@ from dataset_reader.context_reader import *
 from nn_model.context_model import *
 from nn_model.sentence_model import *
 from nn_model.em_model import EMSERModel
+from nn_model.multitask_model import MultiSERModel
 from nn_model.syn_model import SynSERModel
 
 
@@ -68,7 +69,6 @@ class Syn_extractor:
             all_predictions.append(predictions)
         return all_predictions
         
-
 
 class MultiTask_extractor:
     def __init__(self, model_mode):
@@ -132,6 +132,61 @@ class MultiTask_extractor:
             predictions, atypes = self.predict(items)
             all_predictions.append(predictions)
         return all_predictions
+
+
+class EMSER_extract:
+    def __init__(self, model_mode):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        bert_model_name = config.BERT_EMBEDDING_ZH
+        bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+        model = EMSERModel.from_pretrained(bert_model_name)
+        model_path = config.TRAINED_MODELS / '20200207_emmodel_advance' / 'model_epoch7_eval_recall_0.537_f1_0.487.m'
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        model.to_mode(model_mode)
+        model.to(device)
+        model.eval()
+        
+        self.tokenizer = bert_tokenizer
+        self.model = model
+        self.device = device
+    
+    @staticmethod
+    def get_item(document):
+        for question in document['QUESTIONS']:
+            out = {'QID': question['QID'], 'SENTS': document['SENTS'],
+                   'QTEXT': question['QTEXT_CN'], 'SUP_EVIDENCE': []}
+            yield out
+    
+    def predict(self, items):
+        predictions = []
+        for item in items:
+            with torch.no_grad():
+                train_set = SerSentenceDataset([item],
+                                               transform=torchvision.transforms.Compose([EMIdx(self.tokenizer)]))
+                batch = EM_collate([sample for sample in train_set])
+                for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type']:
+                    batch[key] = batch[key].to(self.device)
+                prediction = self.model.predict_fgc(batch)
+                predictions.append(prediction)
+        
+        return predictions
+    
+    def predict_score(self, item):
+        with torch.no_grad():
+            train_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([EMIdx(self.tokenizer)]))
+            batch = EM_collate([sample for sample in train_set])
+            for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type']:
+                batch[key] = batch[key].to(self.device)
+            score_list = self.model.predict_score(batch)
+        return score_list
+    
+    def predict_all_documents(self, documents):
+        all_predictions = []
+        for document in tqdm(documents):
+            items = [item for item in self.get_item(document)]
+            predictions = self.predict(items)
+            all_predictions.append(predictions)
+        return all_predictions
     
 
 class SER_sent_extract_V1:
@@ -166,60 +221,6 @@ class SER_sent_extract_V1:
                 predictions.append(prediction)
     
         return predictions
-
-
-class EMSER_extract:
-    def __init__(self, model_mode):
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        bert_model_name = config.BERT_EMBEDDING_ZH
-        bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
-        model = EMSERModel.from_pretrained(bert_model_name)
-        model_path = config.TRAINED_MODELS / '20200207_emmodel_advance' / 'model_epoch7_eval_recall_0.537_f1_0.487.m'
-        model.load_state_dict(torch.load(model_path, map_location=device))
-        model.to_mode(model_mode)
-        model.to(device)
-        model.eval()
-        
-        self.tokenizer = bert_tokenizer
-        self.model = model
-        self.device = device
-    
-    @staticmethod
-    def get_item(document):
-        for question in document['QUESTIONS']:
-            out = {'QID': question['QID'], 'SENTS': document['SENTS'],
-                   'QTEXT': question['QTEXT_CN'], 'SUP_EVIDENCE': []}
-            yield out
-    
-    def predict(self, items):
-        predictions = []
-        for item in items:
-            with torch.no_grad():
-                train_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([EMIdx(self.tokenizer)]))
-                batch = EM_collate([sample for sample in train_set])
-                for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type']:
-                    batch[key] = batch[key].to(self.device)
-                prediction = self.model.predict_fgc(batch)
-                predictions.append(prediction)
-                
-        return predictions
-    
-    def predict_score(self, item):
-        with torch.no_grad():
-            train_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([EMIdx(self.tokenizer)]))
-            batch = EM_collate([sample for sample in train_set])
-            for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type']:
-                batch[key] = batch[key].to(self.device)
-            score_list = self.model.predict_score(batch)
-        return score_list
-    
-    def predict_all_documents(self, documents):
-        all_predictions = []
-        for document in tqdm(documents):
-            items = [item for item in self.get_item(document)]
-            predictions = self.predict(items)
-            all_predictions.append(predictions)
-        return all_predictions
     
     
 class SER_context_extract_V1:

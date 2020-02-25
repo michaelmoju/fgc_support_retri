@@ -64,8 +64,9 @@ def read_fgc(fp, eval=False):
                 print("no gold supporting evidence")
                 print(question)
                 continue
-            out = {'QID': question['QID'], 'SENTS': document['SENTS'], 'SUP_EVIDENCE': question['SHINT'],
-                   'QTEXT': question['QTEXT'], 'ANS': question['ANSWER'][0]['ATEXT'], 'ATYPE': question['ATYPE']}
+            out = {'QID': question['QID'], 'SENTS': document['SENTS'], 'Q_NER': question['QIE']['NER'],
+                   'D_NER': document['DIE']['NER'], 'SUP_EVIDENCE': question['SHINT'],
+                   'QTEXT': question['QTEXT_CN'], 'ANS': question['ANSWER'][0]['ATEXT'], 'ATYPE': question['ATYPE']}
             yield out
 
     with open(fp) as f:
