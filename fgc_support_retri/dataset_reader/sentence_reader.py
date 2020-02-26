@@ -2,6 +2,7 @@ import torch
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 import torch.nn.functional as F
+from utils import normalize_etype
 
 ATYPE_LIST = ['Person', 'Date-Duration', 'Location', 'Organization',
               'Num-Measure', 'YesNo', 'Kinship', 'Event', 'Object', 'Misc']
@@ -13,7 +14,7 @@ ETYPE_LIST = ['O',
               'DATE', 'TIME', 'DURATION', 'SET',
               'EMAIL', 'URL', 'CITY', 'STATE_OR_PROVINCE', 'COUNTRY', 'RELIGION',
               'TITLE', 'IDEOLOGY', 'CRIMINAL_CHARGE', 'CAUSE_OF_DEATH']
-ETYPE2id = {v: k for k, v in ETYPE_LIST}
+ETYPE2id = {v: k for k, v in enumerate(ETYPE_LIST)}
 id2ETYPE = {v: k for k, v in ETYPE2id.items()}
 
 
@@ -28,10 +29,14 @@ class SerSentenceDataset(Dataset):
         for ne in ner_list:
             char_b = ne['char_b']
             char_e = ne['char_e']
+            if input_string[char_b:char_e] != ne['string']:
+                print(input_string)
+                print(input_string[char_b:char_e])
+                print(ne)
             assert input_string[char_b:char_e] == ne['string']
             string_pieces.append(input_string[string_b:char_b])
             string_pieces.append(input_string[char_b:char_e])
-            out_ne[len(string_pieces) - 1] = ne['type']  #out_ne = {ne_piece_idx : etype]
+            out_ne[len(string_pieces) - 1] = normalize_etype(ne['type'])  #out_ne = {ne_piece_idx : etype]
             string_b = char_e
         return out_ne, string_pieces
     
@@ -221,7 +226,9 @@ class Idx:
                     qsim_s[i] = level
         
         tokenized_q = ['[CLS]'] + tokenized_q + ['[SEP]']
+        etype_q = [ETYPE2id['O']] + etype_q + [ETYPE2id['O']]
         tokenized_all = tokenized_q + tokenized_s
+        etype_all = etype_q + etype_s
         tf_match = [0] + tf_match_q + [0] + tf_match_s
         idf_match = [0] + idf_match_q + [0] + idf_match_s
         sf_type = [self.sf_level - 1] + sf_type_q + [self.sf_level - 1] + sf_type_s
@@ -234,13 +241,17 @@ class Idx:
             idf_match = idf_match[:511]
             sf_type = sf_type[:511]
             qsim_type = qsim_type[:511]
+            etype_all = etype_all[:511]
         
         if len(tokenized_q) > 511:
             print("tokenized question > 511 id:{}".format(sample['QID']))
             tokenized_q = tokenized_q[:511]
             tokenized_q += ['[SEP]']
+            etype_q = etype_q[:511]
+            etype_q += [ETYPE2id['O']]
         
         tokenized_all += ['[SEP]']
+        etype_all += [ETYPE2id['O']]
         tf_match += [0]
         idf_match += [0]
         sf_type += [self.sf_level - 1]
@@ -264,6 +275,7 @@ class Idx:
         sample['idf_match'] = idf_match
         sample['sf_type'] = sf_type
         sample['qsim_type'] = qsim_type
+        sample['etype_ids'] = etype_all
         
         if atype_label:
             sample['atype_label'] = atype_label
@@ -497,7 +509,7 @@ def Syn_collate(batch):
     idf_match = pad_sequence([torch.tensor(sample['idf_match']) for sample in batch], batch_first=True)
     sf_type = pad_sequence([torch.tensor(sample['sf_type']) for sample in batch], batch_first=True)
     qsim_type = pad_sequence([torch.tensor(sample['qsim_type']) for sample in batch], batch_first=True)
-    
+    etype_ids = pad_sequence([torch.tensor(sample['etype_ids'] for sample in batch)], batch_first=True)
     
     out = {'input_ids': input_ids_batch,
            'question_ids': question_ids_batch,
@@ -506,7 +518,8 @@ def Syn_collate(batch):
            'tf_type': tf_match,
            'idf_type': idf_match,
            'sf_type': sf_type,
-           'qsim_type': qsim_type}
+           'qsim_type': qsim_type,
+           'etype_ids': etype_ids}
     
     if 'label' in batch[0].keys():
         out['label'] = torch.tensor([sample['label'] for sample in batch])

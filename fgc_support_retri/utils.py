@@ -1,6 +1,14 @@
 import json
 
 
+def normalize_etype(ori_etype):
+    etype_map = {'PERSON': 'PER', 'LOCATION': 'LOC', 'ORGANIZATION': 'ORG'}
+    if ori_etype in etype_map:
+        return etype_map[ori_etype]
+    else:
+        return ori_etype
+
+
 def read_hotpot(fp, eval=False):
     def get_sup(item):
         item['SENTS'] = item['DTEXT'].split('\n')[:-1]

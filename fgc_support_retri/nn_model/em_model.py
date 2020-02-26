@@ -8,7 +8,7 @@ import torch.nn.functional
 class BertEmbeddingsPlus(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings.
     """
-    
+
     def __init__(self, config):
         super(BertEmbeddingsPlus, self).__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
@@ -273,4 +273,3 @@ class EMSERModel(BertPreTrainedModel):
             prediction.append(max_i)
         
         return prediction
-
