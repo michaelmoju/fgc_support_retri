@@ -11,7 +11,7 @@ id2ATYPE = {v: k for k, v in ATYPE2id.items()}
 ETYPE_LIST = ['O',
               'PER', 'LOC', 'ORG', 'MISC',
               'MONEY', 'NUMBER', 'ORDINAL', 'PERCENT',
-              'DATE', 'TIME', 'DURATION', 'SET',
+              'DATE', 'TIME', 'DURATION', 'SET', 'FACILITY',
               'EMAIL', 'URL', 'CITY', 'STATE_OR_PROVINCE', 'COUNTRY', 'RELIGION',
               'TITLE', 'IDEOLOGY', 'CRIMINAL_CHARGE', 'CAUSE_OF_DEATH']
 ETYPE2id = {v: k for k, v in enumerate(ETYPE_LIST)}
@@ -33,11 +33,14 @@ class SerSentenceDataset(Dataset):
                 print(input_string)
                 print(input_string[char_b:char_e])
                 print(ne)
-            assert input_string[char_b:char_e] == ne['string']
+                continue
+            # assert input_string[char_b:char_e] == ne['string']
             string_pieces.append(input_string[string_b:char_b])
             string_pieces.append(input_string[char_b:char_e])
             out_ne[len(string_pieces) - 1] = normalize_etype(ne['type'])  #out_ne = {ne_piece_idx : etype]
             string_b = char_e
+        if not string_pieces:
+            string_pieces.append(input_string)
         return out_ne, string_pieces
     
     @staticmethod
@@ -199,8 +202,11 @@ class Idx:
             for level, bound in enumerate(self.sf_level_list):
                 if bound[0] <= sf_score < bound[1]:
                     sf_type_q[i] = level
-            
-            qsim_score = max(F.cosine_similarity(q_emb, s_embeds, dim=-1))
+            try:
+                qsim_score = max(F.cosine_similarity(q_emb, s_embeds, dim=-1))
+            except:
+                print(tokenized_q)
+                print(tokenized_s)
             for level, bound in enumerate(self.qsim_level_list):
                 if bound[0] <= qsim_score < bound[1]:
                     qsim_q[i] = level
@@ -509,7 +515,7 @@ def Syn_collate(batch):
     idf_match = pad_sequence([torch.tensor(sample['idf_match']) for sample in batch], batch_first=True)
     sf_type = pad_sequence([torch.tensor(sample['sf_type']) for sample in batch], batch_first=True)
     qsim_type = pad_sequence([torch.tensor(sample['qsim_type']) for sample in batch], batch_first=True)
-    etype_ids = pad_sequence([torch.tensor(sample['etype_ids'] for sample in batch)], batch_first=True)
+    etype_ids = pad_sequence([torch.tensor(sample['etype_ids']) for sample in batch], batch_first=True)
     
     out = {'input_ids': input_ids_batch,
            'question_ids': question_ids_batch,
