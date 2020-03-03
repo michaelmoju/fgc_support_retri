@@ -272,4 +272,4 @@ class EMSERModel(BertPreTrainedModel):
         if not prediction:
             prediction.append(max_i)
         
-        return prediction
+        return {'sp': prediction}

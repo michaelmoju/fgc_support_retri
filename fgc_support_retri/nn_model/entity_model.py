@@ -56,9 +56,8 @@ class BertEmbeddingsPlus(nn.Module):
 				inputs_embeds
 				+ position_embeddings
 				+ token_type_embeddings
-				+ tf_embeddings
 				+ idf_embeddings
-				+ etype_embeddings
+                + etype_embeddings
 		)
 		
 		embeddings = self.LayerNorm(embeddings)
@@ -193,19 +192,20 @@ class EntitySERModel(BertPreTrainedModel):
 			                         attention_mask=batch['attention_mask'],
 			                         etype_ids=batch['etype_ids']
 			                         )
-		if self.mode == 'all':
+		elif self.mode == 'all':
 			_, q_poolout = self.bert(batch['input_ids'], batch['tf_type'], batch['idf_type'],
 			                         token_type_ids=batch['token_type_ids'],
 			                         attention_mask=batch['attention_mask'])
-		elif self.mode == 'basic+tf'
+		elif self.mode == 'basic+tf':
 			_, q_poolout = self.bert(batch['input_ids'], batch['tf_type'],
 			                         token_type_ids=batch['token_type_ids'],
 			                         attention_mask=batch['attention_mask'])
-		elif self.mode == 'basic+idf':
+		elif self.mode == 'etype+idf':
 			_, q_poolout = self.bert(batch['input_ids'],
 			                         idf_type=batch['idf_type'],
 			                         token_type_ids=batch['token_type_ids'],
-			                         attention_mask=batch['attention_mask'])
+			                         attention_mask=batch['attention_mask'],
+                                     etype_ids=batch['etype_ids'])
 		elif self.mode == 'basic':
 			_, q_poolout = self.bert(batch['input_ids'],
 			                         token_type_ids=batch['token_type_ids'],
@@ -284,5 +284,4 @@ class EntitySERModel(BertPreTrainedModel):
 		if not prediction:
 			prediction.append(max_i)
 		
-		return prediction
-
+		return {'sp': prediction}

@@ -3,7 +3,8 @@ from tqdm import tqdm
 import math
 import torchvision
 from torch.utils.data import DataLoader
-from transformers.tokenization_bert import BertTokenizer, BertModel
+from transformers import BertModel
+from transformers.tokenization_bert import BertTokenizer
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
 from . import config
@@ -22,7 +23,7 @@ from evaluation.eval import eval_sp_fgc, eval_fgc_atype
 bert_model_name = config.BERT_EMBEDDING_ZH
 
 
-def _train_bert_ser_model(num_epochs, batch_size, model_file_name, model, collate_fn, indexer):
+def _train_bert_ser_model(num_epochs, batch_size, model_file_name, model, collate_fn, indexer, input_names):
     warmup_proportion = 0.1
     learning_rate = 5e-5
     eval_frequency = 1
@@ -67,9 +68,9 @@ def _train_bert_ser_model(num_epochs, batch_size, model_file_name, model, collat
         for batch_i, batch in enumerate(tqdm(dataloader_train)):
             optimizer.zero_grad()
             
-            for key in ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type',
-                        'sf_type', 'qsim_type', 'atype_label', 'etype_ids', 'label']:
+            for key in input_names:
                 batch[key] = batch[key].to(device)
+            batch['label'] = batch['label'].to(dtype=torch.float, device=device)
             
             loss = model(batch)
             
@@ -89,28 +90,40 @@ def _train_bert_ser_model(num_epochs, batch_size, model_file_name, model, collat
             with torch.no_grad():
                 predictions = []
                 atypes = []
+
                 for item in tqdm(dev_items):
-                    dev_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([Idx]))
+                    dev_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([indexer]))
                     batch = collate_fn([sample for sample in dev_set])
-                    for key in ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type',
-                                'sf_type', 'qsim_type', 'atype_label', 'etype_ids', 'label']:
+                    for key in input_names:
                         batch[key] = batch[key].to(device)
                     
-                    prediction, atype = model.module.predict_fgc(batch)
-                    predictions.append(prediction)
-                    for type_i in atype:
-                        assert type_i == atype[0]
-                    atypes.append(atype[0])
+                    out_dct = model.module.predict_fgc(batch)
+                    predictions.append(out_dct['sp'])
+                    if 'atype' in out_dct:
+                        for type_i in out_dct['atype']:
+                            assert type_i == out_dct['atype'][0]
+                        atypes.append(atype[0])
                 
-                metrics = eval_sp_fgc(dev_items, predictions)
-                atype_accuracy = eval_fgc_atype(dev_items, atypes)
-                print('epoch %d eval_f1: %.3f atype_acc: %.3f' % (epoch_i, metrics['sp_f1'], atype_accuracy))
+                if atypes:
+                    metrics = eval_sp_fgc(dev_items, predictions)
+                    atype_accuracy = eval_fgc_atype(dev_items, atypes)
+                    print('epoch %d eval_f1: %.3f atype_acc: %.3f' % (epoch_i, metrics['sp_f1'], atype_accuracy))
+
+                    model_to_save = model.module if hasattr(model, 'module') else model
+
+                    torch.save(model_to_save.state_dict(),
+                           str(trained_model_path / "model_epoch{0}_eval_f1_{1:.3f}_atype_{2:.3f}.m".format(epoch_i, metrics['sp_f1'], 
+                                                                                                            atype_accuracy)))
                 
-                model_to_save = model.module if hasattr(model, 'module') else model
-                
-                torch.save(model_to_save.state_dict(),
-                           str(trained_model_path / "model_epoch{0}_eval_f1_{1:.3f}_atype_{2:.3f}.m".
-                               format(epoch_i, metrics['sp_f1'], atype_accuracy)))
+                else:
+                    metrics = eval_sp_fgc(dev_items, predictions)
+                    print('epoch %d eval_recall: %.3f eval_f1: %.3f' % (epoch_i, metrics['sp_recall'], metrics['sp_f1']))
+
+                    model_to_save = model.module if hasattr(model, 'module') else model
+
+                    torch.save(model_to_save.state_dict(),
+                               str(trained_model_path / "model_epoch{0}_eval_recall_{1:.3f}_f1_{2:.3f}.m".format(epoch_i, metrics['sp_recall'],
+                                                                                                                 metrics['sp_f1'])))
 
 
 def train_entity_model(num_epochs, batch_size, model_file_name):
@@ -119,297 +132,65 @@ def train_entity_model(num_epochs, batch_size, model_file_name):
     pretrained_bert.eval()
     
     model = EntitySERModel.from_pretrained(bert_model_name)
-    model.to_mode('etype+all')
+    model.to_mode('etype+idf')
     
     collate_fn = Syn_collate
     indexer = Idx(tokenizer, pretrained_bert)
+    input_names = ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 
+                   'tf_type', 'idf_type', 'sf_type', 'qsim_type', 'atype_label', 'etype_ids', 'label']
     _train_bert_ser_model(num_epochs, batch_size, model_file_name,
-                          model, collate_fn, indexer)
+                          model, collate_fn, indexer, input_names)
 
 
-def train_MultiSERModel(num_epochs, batch_size, model_file_name, model_mode):
-    bert_model_name = config.BERT_EMBEDDING_ZH
-    warmup_proportion = 0.1
-    learning_rate = 5e-5
-    eval_frequency = 1
-    
-    trained_model_path = config.TRAINED_MODELS / model_file_name
-    if not os.path.exists(trained_model_path):
-        os.mkdir(trained_model_path)
-    
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    n_gpu = torch.cuda.device_count()
+def train_MultiSERModel(num_epochs, batch_size, model_file_name):
+    tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+    pretrained_bert = BertModel.from_pretrained(bert_model_name)
+    pretrained_bert.eval()
     
     model = MultiSERModel.from_pretrained(bert_model_name)
+    model.to_mode('all')
+    
     pretrained_bert = BertModel.from_pretrained(bert_model_name)
     pretrained_bert.eval()
-    model.to_mode(model_mode)
-    model.to(device)
-    if n_gpu > 1:
-        model = nn.DataParallel(model)
     
-    param_optimizer = list(model.named_parameters())
+    collate_fn = Syn_collate
+    indexer = SynIdx(tokenizer, pretrained_bert)
+    input_names = ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type',
+                        'qsim_type', 'atype_label', 'label']
+    _train_bert_ser_model(num_epochs, batch_size, model_file_name,
+                          model, collate_fn, indexer, input_names)
     
-    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-    optimizer_grouped_parameters = [
-        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-    ]
-    
-    # read data
-    train_items = read_fgc(config.FGC_TRAIN)
-    dev_items = read_fgc(config.FGC_DEV)
-    
+
+def train_SynSERModel(num_epochs, batch_size, model_file_name):
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
-    train_set = SerSentenceDataset(train_items,
-                                   transform=torchvision.transforms.Compose([SynIdx(tokenizer, pretrained_bert)]))
-    dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=Syn_collate)
-    
-    optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate)
-    num_train_optimization_steps = int(math.ceil(len(train_set) / batch_size)) * num_epochs
-    scheduler = get_linear_schedule_with_warmup(optimizer,
-                                                num_warmup_steps=int(num_train_optimization_steps * warmup_proportion),
-                                                num_training_steps=num_train_optimization_steps)
-    
-    print('start training ... ')
-    for epoch_i in range(num_epochs + 1):
-        model.train()
-        running_loss = 0.0
-        for batch_i, batch in enumerate(tqdm(dataloader_train)):
-            optimizer.zero_grad()
-            
-            for key in ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type',
-                        'qsim_type', 'atype_label', 'label']:
-                batch[key] = batch[key].to(device)
-
-            loss = model(batch)
-            
-            if n_gpu > 1:
-                loss = loss.mean()  # mean() to average on multi-gpu.
-            
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-            running_loss += loss.item()
-        
-        print('epoch %d train_loss: %.3f' % (epoch_i, running_loss / len(dataloader_train)))
-        
-        if epoch_i % eval_frequency == 0:
-            model.eval()
-            
-            with torch.no_grad():
-                predictions = []
-                atypes = []
-                for item in tqdm(dev_items):
-                    dev_set = SerSentenceDataset([item],
-                                                 transform=torchvision.transforms.Compose(
-                                                     [SynIdx(tokenizer, pretrained_bert)]))
-                    batch = Syn_collate([sample for sample in dev_set])
-                    for key in ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type',
-                                'qsim_type', 'atype_label', 'label']:
-                        batch[key] = batch[key].to(device)
-                    
-                    prediction, atype = model.module.predict_fgc(batch)
-                    predictions.append(prediction)
-                    for type_i in atype:
-                        assert type_i == atype[0]    
-                    atypes.append(atype[0])
-                
-                metrics = eval_sp_fgc(dev_items, predictions)
-                atype_accuracy = eval_fgc_atype(dev_items, atypes)
-                print('epoch %d eval_f1: %.3f atype_acc: %.3f' % (epoch_i, metrics['sp_f1'], atype_accuracy))
-                
-                model_to_save = model.module if hasattr(model, 'module') else model
-                
-                torch.save(model_to_save.state_dict(),
-                           str(trained_model_path / "model_epoch{0}_eval_f1_{1:.3f}_atype_{2:.3f}.m".
-                               format(epoch_i, metrics['sp_f1'], atype_accuracy)))
-
-
-def train_SynSERModel(num_epochs, batch_size, model_file_name, model_mode):
-    bert_model_name = config.BERT_EMBEDDING_ZH
-    warmup_proportion = 0.1
-    learning_rate = 5e-5
-    eval_frequency = 1
-    
-    trained_model_path = config.TRAINED_MODELS / model_file_name
-    if not os.path.exists(trained_model_path):
-        os.mkdir(trained_model_path)
-    
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    n_gpu = torch.cuda.device_count()
+    pretrained_bert = BertModel.from_pretrained(bert_model_name)
+    pretrained_bert.eval()
     
     model = SynSERModel.from_pretrained(bert_model_name)
+    model.to_mode('all')
+    
+    collate_fn = Syn_collate
+    indexer = SynIdx(tokenizer, pretrained_bert)
+    input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type', 'qsim_type', 'label']
+    _train_bert_ser_model(num_epochs, batch_size, model_file_name, 
+                          model, collate_fn, indexer, input_names)
+   
+
+def train_EMSERModel(num_epochs, batch_size, model_file_name):
+    tokenizer = BertTokenizer.from_pretrained(bert_model_name)
     pretrained_bert = BertModel.from_pretrained(bert_model_name)
     pretrained_bert.eval()
-    model.to_mode(model_mode)
-    model.to(device)
-    if n_gpu > 1:
-        model = nn.DataParallel(model)
-    
-    param_optimizer = list(model.named_parameters())
-    
-    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-    optimizer_grouped_parameters = [
-        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-    ]
-    
-    # read data
-    train_items = read_fgc(config.FGC_TRAIN)
-    dev_items = read_fgc(config.FGC_DEV)
-    
-    tokenizer = BertTokenizer.from_pretrained(bert_model_name)
-    train_set = SerSentenceDataset(train_items, transform=torchvision.transforms.Compose([SynIdx(tokenizer, pretrained_bert)]))
-    dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=Syn_collate)
-    
-    optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate)
-    num_train_optimization_steps = int(math.ceil(len(train_set) / batch_size)) * num_epochs
-    scheduler = get_linear_schedule_with_warmup(optimizer,
-                                                num_warmup_steps=int(num_train_optimization_steps * warmup_proportion),
-                                                num_training_steps=num_train_optimization_steps)
-    
-    print('start training ... ')
-    for epoch_i in range(num_epochs + 1):
-        model.train()
-        running_loss = 0.0
-        for batch_i, batch in enumerate(tqdm(dataloader_train)):
-            optimizer.zero_grad()
-            
-            for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type', 'qsim_type']:
-                batch[key] = batch[key].to(device)
-            
-            batch['label'] = batch['label'].to(dtype=torch.float, device=device)
-            loss = model(batch)
-            
-            if n_gpu > 1:
-                loss = loss.mean()  # mean() to average on multi-gpu.
-            
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-            running_loss += loss.item()
-        
-        print('epoch %d train_loss: %.3f' % (epoch_i, running_loss / len(dataloader_train)))
-        
-        if epoch_i % eval_frequency == 0:
-            model.eval()
-            
-            with torch.no_grad():
-                predictions = []
-                for item in tqdm(dev_items):
-                    dev_set = SerSentenceDataset([item],
-                                                 transform=torchvision.transforms.Compose([SynIdx(tokenizer, pretrained_bert)]))
-                    batch = Syn_collate([sample for sample in dev_set])
-                    for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type', 'qsim_type']:
-                        batch[key] = batch[key].to(device)
-                    
-                    prediction = model.module.predict_fgc(batch)
-                    predictions.append(prediction)
-                
-                metrics = eval_sp_fgc(dev_items, predictions)
-                print('epoch %d eval_recall: %.3f eval_f1: %.3f' % (epoch_i, metrics['sp_recall'], metrics['sp_f1']))
-                
-                model_to_save = model.module if hasattr(model, 'module') else model
-                
-                torch.save(model_to_save.state_dict(),
-                           str(trained_model_path / "model_epoch{0}_eval_recall_{1:.3f}_f1_{2:.3f}.m".format(epoch_i,
-                                                                                                             metrics[
-                                                                                                                 'sp_recall'],
-                                                                                                             metrics[
-                                                                                                                 'sp_f1'])))
-
-
-def train_EMSERModel(num_epochs, batch_size, model_file_name, model_mode):
-    bert_model_name = config.BERT_EMBEDDING_ZH
-    warmup_proportion = 0.1
-    learning_rate = 5e-5
-    eval_frequency = 1
-    
-    trained_model_path = config.TRAINED_MODELS / model_file_name
-    if not os.path.exists(trained_model_path):
-        os.mkdir(trained_model_path)
-    
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    n_gpu = torch.cuda.device_count()
-    
+ 
     model = EMSERModel.from_pretrained(bert_model_name)
-    model.to_mode(model_mode)
-    model.to(device)
-    if n_gpu > 1:
-        model = nn.DataParallel(model)
+    model.to_mode('all')
     
-    param_optimizer = list(model.named_parameters())
-    
-    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-    optimizer_grouped_parameters = [
-        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-    ]
-    
-    # read data
-    train_items = read_fgc(config.FGC_TRAIN)
-    dev_items = read_fgc(config.FGC_DEV)
-    
-    tokenizer = BertTokenizer.from_pretrained(bert_model_name)
-    train_set = SerSentenceDataset(train_items, transform=torchvision.transforms.Compose([EMIdx(tokenizer)]))
-    dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=EM_collate)
-    
-    optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate)
-    num_train_optimization_steps = int(math.ceil(len(train_set) / batch_size)) * num_epochs
-    scheduler = get_linear_schedule_with_warmup(optimizer,
-                                                num_warmup_steps=int(num_train_optimization_steps * warmup_proportion),
-                                                num_training_steps=num_train_optimization_steps)
-    
-    print('start training ... ')
-    for epoch_i in range(num_epochs + 1):
-        model.train()
-        running_loss = 0.0
-        for batch_i, batch in enumerate(tqdm(dataloader_train)):
-            optimizer.zero_grad()
-            
-            for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type']:
-                batch[key] = batch[key].to(device)
-            
-            batch['label'] = batch['label'].to(dtype=torch.float, device=device)
-            loss = model(batch)
-            
-            if n_gpu > 1:
-                loss = loss.mean()  # mean() to average on multi-gpu.
-            
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-            running_loss += loss.item()
-        
-        print('epoch %d train_loss: %.3f' % (epoch_i, running_loss / len(dataloader_train)))
-        
-        if epoch_i % eval_frequency == 0:
-            model.eval()
-            
-            with torch.no_grad():
-                predictions = []
-                for item in tqdm(dev_items):
-                    dev_set = SerSentenceDataset([item],
-                                                 transform=torchvision.transforms.Compose([EMIdx(tokenizer)]))
-                    batch = EM_collate([sample for sample in dev_set])
-                    for key in ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type']:
-                        batch[key] = batch[key].to(device)
-                    
-                    prediction = model.module.predict_fgc(batch)
-                    predictions.append(prediction)
-                
-                metrics = eval_sp_fgc(dev_items, predictions)
-                print('epoch %d eval_recall: %.3f eval_f1: %.3f' % (epoch_i, metrics['sp_recall'], metrics['sp_f1']))
-                
-                model_to_save = model.module if hasattr(model, 'module') else model
-                
-                torch.save(model_to_save.state_dict(),
-                           str(trained_model_path / "model_epoch{0}_eval_recall_{1:.3f}_f1_{2:.3f}.m".format(epoch_i,
-                                                                                                             metrics[
-                                                                                                                 'sp_recall'],
-                                                                                                             metrics[
-                                                                                                                 'sp_f1'])))
+    collate_fn = Syn_collate
+    indexer = Idx(tokenizer, pretrained_bert)
+    input_names = ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type',
+                        'qsim_type', 'label']
+    _train_bert_ser_model(num_epochs, batch_size, model_file_name, 
+                          model, collate_fn, indexer, input_names)
+
 
 
 def train_BertContextSupModel_V3(num_epochs, batch_size, model_file_name):

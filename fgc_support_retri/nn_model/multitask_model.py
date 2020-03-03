@@ -308,5 +308,4 @@ class MultiSERModel(BertPreTrainedModel):
 			
 		atype = [id2ATYPE[type_id] for type_id in atype]
 		
-		return prediction, atype
-
+		return {'sp': prediction, 'atype': atype}

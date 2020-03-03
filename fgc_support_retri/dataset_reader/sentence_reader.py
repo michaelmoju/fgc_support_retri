@@ -9,14 +9,16 @@ ATYPE_LIST = ['Person', 'Date-Duration', 'Location', 'Organization',
 ATYPE2id = {type: idx for idx, type in enumerate(ATYPE_LIST)}
 id2ATYPE = {v: k for k, v in ATYPE2id.items()}
 ETYPE_LIST = ['O',
+              'FACILITY', 'GPE', 'LOCATION', 'NATIONALITY', 'DEGREE', 'DEMONYM',
               'PER', 'LOC', 'ORG', 'MISC',
               'MONEY', 'NUMBER', 'ORDINAL', 'PERCENT',
-              'DATE', 'TIME', 'DURATION', 'SET', 'FACILITY',
+              'DATE', 'TIME', 'DURATION', 'SET', 
               'EMAIL', 'URL', 'CITY', 'STATE_OR_PROVINCE', 'COUNTRY', 'RELIGION',
               'TITLE', 'IDEOLOGY', 'CRIMINAL_CHARGE', 'CAUSE_OF_DEATH']
 ETYPE2id = {v: k for k, v in enumerate(ETYPE_LIST)}
 id2ETYPE = {v: k for k, v in ETYPE2id.items()}
 
+DEBUG = 1
 
 class SerSentenceDataset(Dataset):
     "Supporting evidence dataset"
@@ -29,18 +31,23 @@ class SerSentenceDataset(Dataset):
         for ne in ner_list:
             char_b = ne['char_b']
             char_e = ne['char_e']
-            if input_string[char_b:char_e] != ne['string']:
-                print(input_string)
-                print(input_string[char_b:char_e])
-                print(ne)
+            if (input_string[char_b] != ne['string'][0] and input_string[char_e-1] != ne['string'][-1]):
+#             if input_string[char_b:char_e] != ne['string']:
+                if DEBUG == 1:
+                    print("input_string:")
+                    print(input_string)
+                    print("input_string[char_b:char_e]:")
+                    print(input_string[char_b:char_e])
+                    print("ne:")
+                    print(ne)
                 continue
             # assert input_string[char_b:char_e] == ne['string']
             string_pieces.append(input_string[string_b:char_b])
             string_pieces.append(input_string[char_b:char_e])
             out_ne[len(string_pieces) - 1] = normalize_etype(ne['type'])  #out_ne = {ne_piece_idx : etype]
             string_b = char_e
-        if not string_pieces:
-            string_pieces.append(input_string)
+        if string_b<len(input_string):
+            string_pieces.append(input_string[string_b:])
         return out_ne, string_pieces
     
     @staticmethod
@@ -69,8 +76,14 @@ class SerSentenceDataset(Dataset):
                 if context_i != target_i:
                     other_context += context_s['text']
                     context_sents.append(context_s['text'])
+                    
+            if item['ATYPE']:
+                assert item['ATYPE'] in ATYPE_LIST
+                atype = item['ATYPE']
+            else:
+                atype = 'Misc'
             out = {'QID': item['QID'], 'QTEXT': item['QTEXT'], 'sentence': sentence['text'],
-                   'other_context': other_context, 'context_sents': context_sents, 'atype': item['ATYPE'],
+                   'other_context': other_context, 'context_sents': context_sents, 'atype': atype,
                    'q_ne': q_ne, 'q_piece': q_string_pieces,
                    's_ne': s_ne, 's_piece': s_string_pieces}
             
@@ -283,8 +296,8 @@ class Idx:
         sample['qsim_type'] = qsim_type
         sample['etype_ids'] = etype_all
         
-        if atype_label:
-            sample['atype_label'] = atype_label
+        assert atype_label is not None
+        sample['atype_label'] = atype_label
         
         return sample
     
