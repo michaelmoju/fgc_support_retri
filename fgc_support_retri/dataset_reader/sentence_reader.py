@@ -18,6 +18,12 @@ ETYPE_LIST = ['O',
 ETYPE2id = {v: k for k, v in enumerate(ETYPE_LIST)}
 id2ETYPE = {v: k for k, v in ETYPE2id.items()}
 
+atype2etype={'Person': ['PER'],
+             'Location': ['LOC', 'GPE', 'STATE_OR_PROVINCE', 'CITY', 'COUNTRY'],
+             'Organization': ['ORG', 'COUNTRY'],
+             'Num-Measure': ['NUMBER', 'ORDINAL', 'NUMBER', 'PERCENT'],
+             'Date-Duration': ['DATE', 'TIME', 'DURATION']}
+
 DEBUG = 1
 
 class SerSentenceDataset(Dataset):
@@ -127,6 +133,7 @@ class Idx:
             qsim_level_list: same as sf_level_list
 
             ent_type: entity type of tokens
+            ans_ent_match: answer type matches entity type
         """
     
     def __init__(self, tokenizer, pretrained_bert, sf_level=20, qsim_level=20):
@@ -173,25 +180,35 @@ class Idx:
                 out_etype += [ETYPE2id['O']] * len(tokenized_p)
         return out_tokenized, out_etype
     
+    @classmethod
+    def is_matched_atype_etype(cls, atype, etype):
+        if atype in atype2etype:
+            if etype in atype2etype[atype]:
+                return True
+        return False
+    
     def __call__(self, sample):
-        
+    
         tokenized_c = self.tokenizer.tokenize(sample['other_context'])
-        
+    
         tokenized_q, etype_q = self.get_tkn_and_etype(sample['q_piece'], sample['q_ne'])
         tokenized_s, etype_s = self.get_tkn_and_etype(sample['s_piece'], sample['s_ne'])
-        
+    
         with torch.no_grad():
             q_embeds = self.tokens2embs(tokenized_q)
             s_embeds = self.tokens2embs(tokenized_s)
-        
+    
         context_sents_num = len(sample['context_sents'])
-        
+    
         context_tokenized_sents = []
         for sent in sample['context_sents']:
             tokens = self.tokenizer.tokenize(sent)
             token_set = set(tokens)
             context_tokenized_sents.append(token_set)
         
+        atype = sample['atype']
+        atype_label = ATYPE2id[atype]
+    
         tf_match_q = [0] * len(tokenized_q)
         tf_match_s = [0] * len(tokenized_s)
         idf_match_q = [0] * len(tokenized_q)
@@ -200,13 +217,15 @@ class Idx:
         sf_type_s = [0] * len(tokenized_s)
         qsim_q = [0] * len(tokenized_q)
         qsim_s = [0] * len(tokenized_s)
-        
+        atype_ent_match_q = [0] * len(tokenized_q)
+        atype_ent_match_s = [0] * len(tokenized_s)
+    
         for i, (token, q_emb) in enumerate(zip(tokenized_q, q_embeds)):
             if token in tokenized_s:
                 tf_match_q[i] = 1
             if token in tokenized_c:
                 idf_match_q[i] = 1
-            
+        
             sfreq = 0
             for tset in context_tokenized_sents:
                 if token in tset:
@@ -223,13 +242,16 @@ class Idx:
             for level, bound in enumerate(self.qsim_level_list):
                 if bound[0] <= qsim_score < bound[1]:
                     qsim_q[i] = level
-        
+                    
+            if Idx.is_matched_atype_etype(atype, id2ETYPE[etype_q[i]]):
+                atype_ent_match_q[i] = 1
+    
         for i, (token, s_emb) in enumerate(zip(tokenized_s, s_embeds)):
             if token in tokenized_q:
                 tf_match_s[i] = 1
             if token in tokenized_c:
                 idf_match_s[i] = 1
-            
+        
             sfreq = 0
             for tset in context_tokenized_sents:
                 if token in tset:
@@ -238,12 +260,15 @@ class Idx:
             for level, bound in enumerate(self.sf_level_list):
                 if bound[0] <= sf_score < bound[1]:
                     sf_type_s[i] = level
-            
+        
             ssim_score = max(F.cosine_similarity(s_emb, q_embeds, dim=-1))
             for level, bound in enumerate(self.qsim_level_list):
                 if bound[0] <= ssim_score < bound[1]:
                     qsim_s[i] = level
-        
+                    
+            if Idx.is_matched_atype_etype(atype, id2ETYPE[etype_s[i]]):
+                atype_ent_match_s[i] = 1
+    
         tokenized_q = ['[CLS]'] + tokenized_q + ['[SEP]']
         etype_q = [ETYPE2id['O']] + etype_q + [ETYPE2id['O']]
         tokenized_all = tokenized_q + tokenized_s
@@ -252,40 +277,39 @@ class Idx:
         idf_match = [0] + idf_match_q + [0] + idf_match_s
         sf_type = [self.sf_level - 1] + sf_type_q + [self.sf_level - 1] + sf_type_s
         qsim_type = [0] + qsim_q + [0] + qsim_s
-        
+        atype_ent_match = [0] + atype_ent_match_q + [0] + atype_ent_match_s
+    
         if len(tokenized_all) > 511:
             print("tokenized all > 511 id:{}".format(sample['QID']))
-            tokenized_all = tokenized_all[:511]
-            tf_match = tf_match[:511]
-            idf_match = idf_match[:511]
-            sf_type = sf_type[:511]
-            qsim_type = qsim_type[:511]
-            etype_all = etype_all[:511]
-        
+            tokenized_all = tokenized_all[:512]
+            tf_match = tf_match[:512]
+            idf_match = idf_match[:512]
+            sf_type = sf_type[:512]
+            qsim_type = qsim_type[:512]
+            etype_all = etype_all[:512]
+            atype_ent_match = atype_ent_match[:512]
+    
         if len(tokenized_q) > 511:
             print("tokenized question > 511 id:{}".format(sample['QID']))
-            tokenized_q = tokenized_q[:511]
+            tokenized_q = tokenized_q[:512]
             tokenized_q += ['[SEP]']
-            etype_q = etype_q[:511]
+            etype_q = etype_q[:512]
             etype_q += [ETYPE2id['O']]
-        
+    
         tokenized_all += ['[SEP]']
         etype_all += [ETYPE2id['O']]
         tf_match += [0]
         idf_match += [0]
         sf_type += [self.sf_level - 1]
         qsim_type += [0]
-        
+        atype_ent_match += [0]
+    
         ids_all = self.tokenizer.convert_tokens_to_ids(tokenized_all)
         ids_q = self.tokenizer.convert_tokens_to_ids(tokenized_q)
         if not ids_all:
             print(ids_all)
             print(sample)
-        
-        atype_label = None
-        if sample['atype']:
-            atype_label = ATYPE2id[sample['atype']]
-        
+    
         sample['input_ids'] = ids_all
         sample['question_ids'] = ids_q
         sample['token_type_ids'] = [0] * len(tokenized_q) + [1] * (len(tokenized_all) - len(tokenized_q))
@@ -295,10 +319,9 @@ class Idx:
         sample['sf_type'] = sf_type
         sample['qsim_type'] = qsim_type
         sample['etype_ids'] = etype_all
-        
-        assert atype_label is not None
         sample['atype_label'] = atype_label
-        
+        sample['atype_ent_match'] = atype_ent_match
+    
         return sample
     
 
@@ -529,6 +552,7 @@ def Syn_collate(batch):
     sf_type = pad_sequence([torch.tensor(sample['sf_type']) for sample in batch], batch_first=True)
     qsim_type = pad_sequence([torch.tensor(sample['qsim_type']) for sample in batch], batch_first=True)
     etype_ids = pad_sequence([torch.tensor(sample['etype_ids']) for sample in batch], batch_first=True)
+    atype_ent_match = pad_sequence([torch.tensor(sample['atype_ent_match']) for sample in batch], batch_first=True)
     
     out = {'input_ids': input_ids_batch,
            'question_ids': question_ids_batch,
@@ -538,6 +562,7 @@ def Syn_collate(batch):
            'idf_type': idf_match,
            'sf_type': sf_type,
            'qsim_type': qsim_type,
+           'atype_ent_match': atype_ent_match,
            'etype_ids': etype_ids}
     
     if 'label' in batch[0].keys():

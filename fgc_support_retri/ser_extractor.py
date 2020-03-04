@@ -11,6 +11,7 @@ from nn_model.em_model import EMSERModel
 from nn_model.multitask_model import MultiSERModel
 from nn_model.syn_model import SynSERModel
 from nn_model.entity_model import EntitySERModel
+from nn_model.entity_match_model import EntityMatchModel
 
 bert_model_name = config.BERT_EMBEDDING_ZH
 
@@ -31,20 +32,7 @@ class Extractor:
                    'Q_NER': question['QIE']['NER'], 'D_NER': document['DIE']['NER'],
                    'QTEXT': question['QTEXT_CN'], 'SUP_EVIDENCE': [], 'ATYPE': None}
             yield out
-    
-#     def predict(self, items):
-#         predictions = []
-        
-#         for item in items:
-#             with torch.no_grad():
-#                 test_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([self.indexer]))
-#                 batch = self.collate_fn([sample for sample in test_set])
-#                 for key in self.input_names:
-#                     batch[key] = batch[key].to(self.device)
-#                 prediction = self.model.predict_fgc(batch)
-#                 predictions.append(prediction)
-                
-#         return predictions
+            
     
     def predict(self, items):
         predictions = []
@@ -61,9 +49,9 @@ class Extractor:
                     predictions.append(out_dct['sp'])
                 
                 if 'atype' in out_dct:
-                    for type_i in atype:
-                        assert type_i == atype[0]
-                    atypes.append(atype[0])
+                    for type_i in out_dct['atype']:
+                        assert type_i == out_dct['atype'][0]
+                    atypes.append(type_i)
                 
         return predictions, atypes
     
@@ -85,9 +73,26 @@ class Extractor:
         return all_predictions
 
 
+class EntityMatch_extractor(Extractor):
+    def __init__(self):
+        input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'etype_ids']
+        super(EntityMatch_extractor, self).__init__(input_names)
+    
+        model = EntityMatchModel.from_pretrained(bert_model_name)
+        model_path = config.TRAINED_MODELS / '20200302_entity' / 'model_epoch10_eval_recall_0.546_f1_0.531.m'
+        model.load_state_dict(torch.load(model_path, map_location=self.device))
+        model.to(self.device)
+        model.eval()
+        self.model = model
+    
+        pretrained_bert = BertModel.from_pretrained(bert_model_name)
+        pretrained_bert.eval()
+        self.indexer = Idx(self.tokenizer, pretrained_bert)
+        self.collate_fn = Syn_collate
+
 class Entity_extractor(Extractor):
     def __init__(self):
-        input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type', 'qsim_type', 'etype_ids']
+        input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'etype_ids']
         super(Entity_extractor, self).__init__(input_names)
 
         model = EntitySERModel.from_pretrained(bert_model_name)

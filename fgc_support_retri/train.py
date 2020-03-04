@@ -17,6 +17,7 @@ from nn_model.em_model import EMSERModel
 from nn_model.syn_model import SynSERModel
 from nn_model.multitask_model import MultiSERModel
 from nn_model.entity_model import EntitySERModel
+from nn_model.entity_match_model import EntityMatchModel
 from .eval_old import evalaluate_f1
 from evaluation.eval import eval_sp_fgc, eval_fgc_atype
 
@@ -122,8 +123,23 @@ def _train_bert_ser_model(num_epochs, batch_size, model_file_name, model, collat
                     model_to_save = model.module if hasattr(model, 'module') else model
 
                     torch.save(model_to_save.state_dict(),
-                               str(trained_model_path / "model_epoch{0}_eval_recall_{1:.3f}_f1_{2:.3f}.m".format(epoch_i, metrics['sp_recall'],
-                                                                                                                 metrics['sp_f1'])))
+                               str(trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}.m".
+                                   format(epoch_i, metrics['sp_em'], metrics['sp_prec'], metrics['sp_recall'], metrics['sp_f1'])))
+
+
+def train_entity_match_model(num_epochs, batch_size, model_file_name):
+    tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+    pretrained_bert = BertModel.from_pretrained(bert_model_name)
+    pretrained_bert.eval()
+    
+    model = EntityMatchModel.from_pretrained(bert_model_name)
+    
+    collate_fn = Syn_collate
+    indexer = Idx(tokenizer, pretrained_bert)
+    input_names = ['input_ids', 'token_type_ids', 'attention_mask',
+                   'tf_type', 'idf_type', 'atype_ent_match', 'label']
+    _train_bert_ser_model(num_epochs, batch_size, model_file_name,
+                          model, collate_fn, indexer, input_names)
 
 
 def train_entity_model(num_epochs, batch_size, model_file_name):
