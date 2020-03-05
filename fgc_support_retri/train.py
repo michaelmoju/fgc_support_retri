@@ -3,64 +3,171 @@ from tqdm import tqdm
 import math
 import torchvision
 from torch.utils.data import DataLoader
-from transformers import BertModel
 from transformers.tokenization_bert import BertTokenizer
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
 from . import config
-from .utils import read_fgc
-from dataset_reader.context_reader import *
-from dataset_reader.sentence_reader import *
-from nn_model.context_model import *
-from nn_model.sentence_model import *
-from nn_model.em_model import EMSERModel
-from nn_model.syn_model import SynSERModel
-from nn_model.multitask_model import MultiSERModel
-from nn_model.entity_model import EntitySERModel
-from nn_model.entity_match_model import EntityMatchModel
+from .utils import read_fgc, json_load
+from .dataset_reader.context_reader import *
+from .dataset_reader.sentence_reader import *
+from .dataset_reader.cross_sent_reader import *
+from .nn_model.context_model import *
+from .nn_model.sentence_model import *
+from .nn_model.em_model import EMSERModel
+from .nn_model.syn_model import SynSERModel
+from .nn_model.multitask_model import MultiSERModel
+from .nn_model.entity_model import EntitySERModel
+from .nn_model.entity_match_model import EntityMatchModel
 from .eval_old import evalaluate_f1
-from evaluation.eval import eval_sp_fgc, eval_fgc_atype
+from .evaluation.eval import eval_sp_fgc, eval_fgc_atype
 
 bert_model_name = config.BERT_EMBEDDING_ZH
 
 
+class SER_Trainer:
+    def __init__(self, model, collate_fn, indexer, dataset_reader, input_names):
+        self.warmup_proportion = 0.1
+        self.lr = 2e-5
+        self.eval_frequency = 1
+        self.collate_fn = collate_fn
+        self.indexer = indexer
+        self.input_names = input_names
+        self.dataset_reader = dataset_reader
+        self.model = model
+        
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device
+        
+    def callback(self):
+    
+        if atype_preds:
+            metrics = eval_sp_fgc(sp_golds, sp_preds)
+            atype_accuracy = eval_fgc_atype(dev_items, atype_preds)
+            print('epoch %d eval_f1: %.3f atype_acc: %.3f' % (epoch_i, metrics['sp_f1'], atype_accuracy))
+        
+            model_to_save = model.module if hasattr(model, 'module') else model
+        
+            torch.save(model_to_save.state_dict(),
+                       str(trained_model_path / "model_epoch{0}_eval_f1_{1:.3f}_atype_{2:.3f}.m".format(
+                           epoch_i, metrics['sp_f1'],
+                           atype_accuracy)))
+    
+        else:
+            metrics = eval_sp_fgc(sp_golds, sp_preds)
+            print('epoch %d eval_recall: %.3f eval_f1: %.3f' % (
+                epoch_i, metrics['sp_recall'], metrics['sp_f1']))
+        
+            model_to_save = model.module if hasattr(model, 'module') else model
+        
+            torch.save(model_to_save.state_dict(),
+                       str(
+                           trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}.m".
+                           format(epoch_i, metrics['sp_em'], metrics['sp_prec'], metrics['sp_recall'],
+                                  metrics['sp_f1'])))
+        
+            
+        
+    def eval(self, dev_documents):
+        self.model.eval()
+    
+        with torch.no_grad():
+            sp_golds = []
+            sp_preds = []
+            atype_golds = []
+            atype_preds = []
+            
+            for d in dev_documents:
+                for q in d['QUESTIONS']:
+                    q_items = [item for item in self.dataset_reader.get_items_in_q(q, d)]
+                    dev_set = self.dataset_reader(q_items, transform=torchvision.transforms.Compose([self.indexer]))
+                    batch = self.collate_fn([sample for sample in dev_set])
+                    for key in self.input_names:
+                        batch[key] = batch[key].to(self.device)
+                
+                    out_dct = self.model.module.predict_fgc(batch)
+                    
+                    sp_preds.append(out_dct['sp'])
+                    sp_golds.append(q['SHINT'])
+                    
+                    if 'atype' in out_dct:
+                        for type_i in out_dct['atype']:
+                            assert type_i == out_dct['atype'][0]
+                        atype_preds.append(type_i)
+                        atype_golds.append(q['ATYPE'])
+                        
+        if atype_preds:
+            metrics = eval_sp_fgc(sp_golds, sp_preds)
+            atype_accuracy = eval_fgc_atype(dev_items, atype_preds)
+            
+        return sp_golds, sp_preds, atype_golds, atype_preds
+                    
+    def train(self, num_epochs, batch_size, model_file_name):
+        
+        trained_model_path = config.TRAINED_MODELS / model_file_name
+        if not os.path.exists(trained_model_path):
+            os.mkdir(trained_model_path)
+
+        n_gpu = torch.cuda.device_count()
+
+        self.model.to(self.device)
+        if n_gpu > 1:
+            self.model = nn.DataParallel(self.model)
+
+        param_optimizer = list(self.model.named_parameters())
+
+        no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+        optimizer_grouped_parameters = [
+            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        ]
+        
+        # read data
+        train_documents = json_load(config.FGC_TRAIN)
+        dev_documents = json_load(config.FGC_DEV)
+        
+        train_set = self.dataset_reader(train_documents, transform=torchvision.transforms.Compose([self.indexer]))
+        dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=self.collate_fn)
+        
+        # optimizer
+        optimizer = AdamW(optimizer_grouped_parameters, lr=self.lr)
+        num_train_optimization_steps = int(math.ceil(len(train_set) / batch_size)) * num_epochs
+        scheduler = get_linear_schedule_with_warmup(optimizer,
+                                                    num_warmup_steps=int(
+                                                        num_train_optimization_steps * self.warmup_proportion),
+                                                    num_training_steps=num_train_optimization_steps)
+        
+        print('start training ... ')
+        
+        for epoch_i in range(num_epochs + 1):
+            self.model.train()
+            running_loss = 0.0
+            for batch_i, batch in enumerate(tqdm(dataloader_train)):
+                optimizer.zero_grad()
+        
+                for key in self.input_names:
+                    batch[key] = batch[key].to(device)
+                batch['label'] = batch['label'].to(dtype=torch.float, device=device)
+        
+                loss = self.model(batch)
+        
+                if n_gpu > 1:
+                    loss = loss.mean()  # mean() to average on multi-gpu.
+        
+                loss.backward()
+                optimizer.step()
+                scheduler.step()
+                running_loss += loss.item()
+    
+            print('epoch %d train_loss: %.3f' % (epoch_i, running_loss / len(dataloader_train)))
+    
+            if epoch_i % self.eval_frequency == 0:
+                self.eval(dev_documents)
+                
+                
+                
+
 def _train_bert_ser_model(num_epochs, batch_size, model_file_name, model, collate_fn, indexer, input_names):
-    warmup_proportion = 0.1
-    learning_rate = 2e-5
-    eval_frequency = 1
-    
-    trained_model_path = config.TRAINED_MODELS / model_file_name
-    if not os.path.exists(trained_model_path):
-        os.mkdir(trained_model_path)
-    
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    n_gpu = torch.cuda.device_count()
-    
-    model.to(device)
-    if n_gpu > 1:
-        model = nn.DataParallel(model)
-    
-    param_optimizer = list(model.named_parameters())
-    
-    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-    optimizer_grouped_parameters = [
-        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-    ]
-    
-    # read data
-    train_items = read_fgc(config.FGC_TRAIN)
-    dev_items = read_fgc(config.FGC_DEV)
-    
-    train_set = SerSentenceDataset(train_items,
-                                   transform=torchvision.transforms.Compose([indexer]))
-    dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
-    
-    optimizer = AdamW(optimizer_grouped_parameters, lr=learning_rate)
-    num_train_optimization_steps = int(math.ceil(len(train_set) / batch_size)) * num_epochs
-    scheduler = get_linear_schedule_with_warmup(optimizer,
-                                                num_warmup_steps=int(num_train_optimization_steps * warmup_proportion),
-                                                num_training_steps=num_train_optimization_steps)
+
     
     print('start training ... ')
     for epoch_i in range(num_epochs + 1):

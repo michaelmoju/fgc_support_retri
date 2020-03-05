@@ -2,7 +2,7 @@ import torch
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 import torch.nn.functional as F
-from utils import normalize_etype
+from ..utils import normalize_etype
 
 ATYPE_LIST = ['Person', 'Date-Duration', 'Location', 'Organization',
               'Num-Measure', 'YesNo', 'Kinship', 'Event', 'Object', 'Misc']
