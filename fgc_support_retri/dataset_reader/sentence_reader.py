@@ -9,7 +9,7 @@ ATYPE_LIST = ['Person', 'Date-Duration', 'Location', 'Organization',
 ATYPE2id = {type: idx for idx, type in enumerate(ATYPE_LIST)}
 id2ATYPE = {v: k for k, v in ATYPE2id.items()}
 ETYPE_LIST = ['O',
-              'FACILITY', 'GPE', 'LOCATION', 'NATIONALITY', 'DEGREE', 'DEMONYM',
+              'FACILITY', 'GPE', 'NATIONALITY', 'DEGREE', 'DEMONYM',
               'PER', 'LOC', 'ORG', 'MISC',
               'MONEY', 'NUMBER', 'ORDINAL', 'PERCENT',
               'DATE', 'TIME', 'DURATION', 'SET', 
@@ -180,8 +180,8 @@ class Idx:
                 out_etype += [ETYPE2id['O']] * len(tokenized_p)
         return out_tokenized, out_etype
     
-    @classmethod
-    def is_matched_atype_etype(cls, atype, etype):
+    @staticmethod
+    def is_matched_atype_etype(atype, etype):
         if atype in atype2etype:
             if etype in atype2etype[atype]:
                 return True
@@ -243,7 +243,7 @@ class Idx:
                 if bound[0] <= qsim_score < bound[1]:
                     qsim_q[i] = level
                     
-            if Idx.is_matched_atype_etype(atype, id2ETYPE[etype_q[i]]):
+            if self.is_matched_atype_etype(atype, id2ETYPE[etype_q[i]]):
                 atype_ent_match_q[i] = 1
     
         for i, (token, s_emb) in enumerate(zip(tokenized_s, s_embeds)):
@@ -266,7 +266,7 @@ class Idx:
                 if bound[0] <= ssim_score < bound[1]:
                     qsim_s[i] = level
                     
-            if Idx.is_matched_atype_etype(atype, id2ETYPE[etype_s[i]]):
+            if self.is_matched_atype_etype(atype, id2ETYPE[etype_s[i]]):
                 atype_ent_match_s[i] = 1
     
         tokenized_q = ['[CLS]'] + tokenized_q + ['[SEP]']

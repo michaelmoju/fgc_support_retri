@@ -26,7 +26,7 @@ bert_model_name = config.BERT_EMBEDDING_ZH
 
 def _train_bert_ser_model(num_epochs, batch_size, model_file_name, model, collate_fn, indexer, input_names):
     warmup_proportion = 0.1
-    learning_rate = 5e-5
+    learning_rate = 2e-5
     eval_frequency = 1
     
     trained_model_path = config.TRAINED_MODELS / model_file_name

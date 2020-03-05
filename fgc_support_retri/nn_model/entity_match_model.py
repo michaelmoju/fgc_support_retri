@@ -36,8 +36,8 @@ class BertEmbeddingsPlus(nn.Module):
 			position_ids = position_ids.unsqueeze(0).expand(input_shape)
 		if token_type_ids is None:
 			token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-		if etype_ids is None:
-			etype_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+		if atype_ent_match is None:
+			atype_ent_match = torch.zeros(input_shape, dtype=torch.long, device=device)
 		
 		if tf_type is None:
 			tf_type = torch.zeros(input_shape, dtype=torch.long, device=device)
@@ -47,7 +47,7 @@ class BertEmbeddingsPlus(nn.Module):
 			inputs_embeds = self.word_embeddings(input_ids)
 		
 		position_embeddings = self.position_embeddings(position_ids)
-		ae_match_embeddings = self.etype_embeddings((atype_ent_match > 0).long())
+		ae_match_embeddings = self.ae_match_embeddings((atype_ent_match > 0).long())
 		token_type_embeddings = self.token_type_embeddings((token_type_ids > 0).long())
 		tf_embeddings = self.tf_embeddings((tf_type > 0).long())
 		idf_embeddings = self.idf_embeddings((idf_type > 0).long())
@@ -56,6 +56,7 @@ class BertEmbeddingsPlus(nn.Module):
 				inputs_embeds
 				+ position_embeddings
 				+ token_type_embeddings
+                + tf_embeddings
 				+ idf_embeddings
 				+ ae_match_embeddings
 		)
@@ -74,7 +75,7 @@ class BertModelPlus(BertModel):
 		self.init_weights()
 	
 	def forward(self, input_ids=None, tf_type=None, idf_type=None, token_type_ids=None, attention_mask=None,
-	            position_ids=None, etype_ids=None, atype_ent_match=None,
+	            position_ids=None, atype_ent_match=None,
 	            head_mask=None, inputs_embeds=None, encoder_hidden_states=None, encoder_attention_mask=None):
 		
 		if input_ids is not None and inputs_embeds is not None:
@@ -160,7 +161,7 @@ class BertModelPlus(BertModel):
 		
 		embedding_output = self.embeddings(input_ids=input_ids, tf_type=tf_type, idf_type=idf_type,
 		                                   position_ids=position_ids, token_type_ids=token_type_ids,
-		                                   inputs_embeds=inputs_embeds, etype_ids=etype_ids,
+		                                   inputs_embeds=inputs_embeds,
 		                                   atype_ent_match=atype_ent_match)
 		encoder_outputs = self.encoder(embedding_output,
 		                               attention_mask=extended_attention_mask,
@@ -190,7 +191,6 @@ class EntityMatchModel(BertPreTrainedModel):
 		_, q_poolout = self.bert(batch['input_ids'], batch['tf_type'], batch['idf_type'],
 		                         token_type_ids=batch['token_type_ids'],
 		                         attention_mask=batch['attention_mask'],
-		                         etype_ids=batch['etype_ids'],
 		                         atype_ent_match=batch['atype_ent_match']
 		                         )
 		

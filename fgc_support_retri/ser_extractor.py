@@ -18,8 +18,8 @@ bert_model_name = config.BERT_EMBEDDING_ZH
 class Extractor:
     def __init__(self, input_names):
         self.input_names = input_names
-#         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        device = torch.device("cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#         device = torch.device("cpu")
         self.device = device
         
         bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -28,10 +28,14 @@ class Extractor:
     @staticmethod
     def get_item(document):
         for question in document['QUESTIONS']:
-            out = {'QID': question['QID'], 'SENTS': document['SENTS'], 
+            yield self.get_item_from_question(question, document)
+    
+    @staticmethod  
+    def get_item_from_question(question, document):
+        out = {'QID': question['QID'], 'SENTS': document['SENTS'], 
                    'Q_NER': question['QIE']['NER'], 'D_NER': document['DIE']['NER'],
-                   'QTEXT': question['QTEXT_CN'], 'SUP_EVIDENCE': [], 'ATYPE': None}
-            yield out
+                   'QTEXT': question['QTEXT_CN'], 'SUP_EVIDENCE': [], 'ATYPE': question['ATYPE']}
+        yield out
             
     
     def predict(self, items):
@@ -46,7 +50,7 @@ class Extractor:
                 out_dct = self.model.predict_fgc(batch)
                 
                 if 'sp' in out_dct:
-                    predictions.append(out_dct['sp'])
+                    predictions = out_dct['sp']
                 
                 if 'atype' in out_dct:
                     for type_i in out_dct['atype']:
@@ -75,11 +79,11 @@ class Extractor:
 
 class EntityMatch_extractor(Extractor):
     def __init__(self):
-        input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'etype_ids']
+        input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'atype_ent_match']
         super(EntityMatch_extractor, self).__init__(input_names)
     
         model = EntityMatchModel.from_pretrained(bert_model_name)
-        model_path = config.TRAINED_MODELS / '20200302_entity' / 'model_epoch10_eval_recall_0.546_f1_0.531.m'
+        model_path = config.TRAINED_MODELS / '20200304_entity_match_lr=2e-5' / 'model_epoch17_eval_em:0.147_precision:0.628_recall:0.578_f1:0.555.m'
         model.load_state_dict(torch.load(model_path, map_location=self.device))
         model.to(self.device)
         model.eval()
