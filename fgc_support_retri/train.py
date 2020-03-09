@@ -49,9 +49,8 @@ class SER_Trainer:
             
             for d in dev_documents:
                 for q in d['QUESTIONS']:
-                    q_items = [item for item in self.dataset_reader.get_items_in_q(q, d)]
-                    dev_set = self.dataset_reader(q_items, transform=torchvision.transforms.Compose([self.indexer]))
-                    batch = self.collate_fn([sample for sample in dev_set])
+                    q_instances = [self.indexer(item) for item in self.dataset_reader.get_items_in_q(q, d)]
+                    batch = self.collate_fn(q_instances)
                     for key in self.input_names:
                         batch[key] = batch[key].to(self.device)
                 

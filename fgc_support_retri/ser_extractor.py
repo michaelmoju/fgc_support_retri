@@ -16,7 +16,7 @@ from .nn_model.entity_match_model import EntityMatchModel
 bert_model_name = config.BERT_EMBEDDING_ZH
 
 class Extractor:
-    def __init__(self, input_names):
+    def __init__(self, input_names, dataset_reader):
         self.input_names = input_names
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #         device = torch.device("cpu")
@@ -24,6 +24,7 @@ class Extractor:
         
         bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
         self.tokenizer = bert_tokenizer
+        self.dataset_reader = dataset_reader
         
     @staticmethod
     def get_item(document):
@@ -37,26 +38,29 @@ class Extractor:
                    'QTEXT': question['QTEXT_CN'], 'SUP_EVIDENCE': [], 'ATYPE': question['ATYPE']}
         yield out
     
-    def predict(self, items):
-        predictions = []
-        atypes = []
-        for item in items:
-            with torch.no_grad():
-                test_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([self.indexer]))
-                batch = self.collate_fn([sample for sample in test_set])
-                for key in self.input_names:
-                    batch[key] = batch[key].to(self.device)
-                out_dct = self.model.predict_fgc(batch)
+    def predict(self, q, d):
+        sp_preds = []
+        atype_preds = []
+        
+        with torch.no_grad():
+            q_instances = [self.indexer(item) for item in self.dataset_reader.get_items_in_q(q, d)]
+            batch = self.collate_fn(q_instances)
+            for key in self.input_names:
+                batch[key] = batch[key].to(self.device)
+            
+            out_dct = self.model.predict_fgc(batch)
+            
+            if 'sp' in q:
+                sp_preds.append(list(set(q['sp']) | set(out_dct['sp'])))
+            else:
+                sp_preds.append(out_dct['sp'])
                 
-                if 'sp' in out_dct:
-                    predictions = out_dct['sp']
-                
-                if 'atype' in out_dct:
-                    for type_i in out_dct['atype']:
-                        assert type_i == out_dct['atype'][0]
-                    atypes.append(type_i)
-                
-        return predictions, atypes
+            if 'atype' in out_dct:
+                for type_i in out_dct['atype']:
+                    assert type_i == out_dct['atype'][0]
+                atype_preds.append(type_i)
+
+        return sp_preds, atype_preds
     
     def predict_score(self, item):
         with torch.no_grad():
@@ -79,7 +83,8 @@ class Extractor:
 class EntityMatch_extractor(Extractor):
     def __init__(self):
         input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'atype_ent_match']
-        super(EntityMatch_extractor, self).__init__(input_names)
+        dataset_reader = SerSentenceDataset
+        super(EntityMatch_extractor, self).__init__(input_names, dataset_reader)
     
         model = EntityMatchModel.from_pretrained(bert_model_name)
         model_path = config.TRAINED_MODELS / '20200304_entity_match_lr=2e-5' / 'model_epoch17_eval_em:0.147_precision:0.628_recall:0.578_f1:0.555.m'
