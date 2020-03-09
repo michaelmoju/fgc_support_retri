@@ -39,7 +39,7 @@ class CrossSentDataset(Dataset):
 			targets = get_targets(sp_i, sp, len(sents), window=3, bidirectional=True)
 			for t in targets:
 				out = {"qid": q['QID'], "qText": q['QTEXT_CN'], "sText": sents[sp_i], 'tText': sents[t],
-				       'position': t - sp_i, 'label': 1 if t in q['SHINT'] else 0}
+				       'sent_id': t, 'sp': sp, 'position': t - sp_i, 'label': 1 if t in q['SHINT'] else 0}
 				yield out
 	
 	def __init__(self, documents, transform=None):
@@ -97,3 +97,25 @@ class CrossSentIdx:
 		sample['position_id'] = position_id
 		
 		return sample
+
+
+def CrossSent_collate(batch):
+	input_ids_batch = pad_sequence([torch.tensor(sample['input_ids']) for sample in batch], batch_first=True)
+	token_type_ids_batch = pad_sequence([torch.tensor(sample['token_type_ids']) for sample in batch], batch_first=True)
+	attention_mask_batch = pad_sequence([torch.tensor(sample['attention_mask']) for sample in batch], batch_first=True)
+	position_id_batch = torch.tensor([sample['position_id'] for sample in batch])
+	sent_id = [sample['sent_id'] for sample in batch]
+	
+	out = {'input_ids': input_ids_batch,
+	       'token_type_ids': token_type_ids_batch,
+	       'attention_mask': attention_mask_batch,
+	       'position_id': position_id_batch,
+	       'sent_id': sent_id}
+	
+	if 'label' in batch[0].keys():
+		out['label'] = torch.tensor([sample['label'] for sample in batch])
+	
+	if 'atype_label' in batch[0].keys():
+		out['atype_label'] = torch.tensor([sample['atype_label'] for sample in batch])
+	
+	return out

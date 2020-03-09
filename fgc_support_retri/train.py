@@ -57,7 +57,10 @@ class SER_Trainer:
                 
                     out_dct = self.model.module.predict_fgc(batch)
                     
-                    sp_preds.append(out_dct['sp'])
+                    if 'sp' in q:
+                        sp_preds.append(list(set(q['sp']) | set(out_dct['sp'])))
+                    else:
+                        sp_preds.append(out_dct['sp'])
                     sp_golds.append(q['SHINT'])
                     
                     if 'atype' in out_dct:

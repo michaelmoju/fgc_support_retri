@@ -194,50 +194,21 @@ class CrossSentModel(BertPreTrainedModel):
 		scores = self._predict(logits)
 		return scores
 	
-	def predict_hotpot(self, batch, threshold=0.5):
-		logits = self.forward_nn(batch)
-		scores = self._predict(logits)
-		
-		# scored_facts {doc_name: fact}
-		scored_facts = {}
-		
-		prediction = []
-		for i, score in enumerate(scores):
-			if score >= threshold:
-				fact = batch['element'][i]
-				if fact[0] not in scored_facts:
-					scored_facts[fact[0]] = [(fact, score)]
-				else:
-					scored_facts[fact[0]].append((fact, score))
-		
-		for doc, doc_scored_facts in scored_facts.items():
-			sorted_scored_facts = sorted(doc_scored_facts, key=lambda x: x[1], reverse=True)
-			doc_prediction = []
-			for f, s in sorted_scored_facts:
-				if s >= threshold:
-					doc_prediction.append(f)
-			if not doc_prediction:
-				doc_prediction.append(sorted_scored_facts[0][0])
-			prediction += doc_prediction
-		
-		return prediction
-	
 	def predict_fgc(self, batch, threshold=0.5):
 		logits = self.forward_nn(batch)
 		scores = torch.sigmoid(logits)
 		scores = scores.cpu().numpy().tolist()
 		
-		score_list = [(i, score) for i, score in enumerate(scores)]
-		
 		max_i = 0
 		max_score = 0
-		prediction = []
-		for i, score in score_list:
+		prediction_set = set()
+		for score, sent_id in zip(scores, batch['sent_id']):
 			if score > max_score:
-				max_i = i
+				max_i = sent_id
 			if score >= threshold:
-				prediction.append(i)
+				prediction_set.add(sent_id)
 				
+		prediction = list(prediction_set)
 		if not prediction:
 			prediction.append(max_i)
 		

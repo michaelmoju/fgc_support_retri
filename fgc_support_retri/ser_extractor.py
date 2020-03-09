@@ -36,7 +36,6 @@ class Extractor:
                    'Q_NER': question['QIE']['NER'], 'D_NER': document['DIE']['NER'],
                    'QTEXT': question['QTEXT_CN'], 'SUP_EVIDENCE': [], 'ATYPE': question['ATYPE']}
         yield out
-            
     
     def predict(self, items):
         predictions = []
