@@ -3,7 +3,7 @@ from transformers.modeling_bert import BertLayerNorm, BertEncoder, BertPooler, B
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dataset_reader.sentence_reader import ATYPE_LIST, id2ATYPE
+from ..dataset_reader.sentence_reader import ATYPE_LIST, id2ATYPE
 
 
 class BertEmbeddingsPlus(nn.Module):

@@ -3,15 +3,15 @@ from transformers import BertTokenizer, BertModel
 from tqdm import tqdm
 
 from . import config
-from dataset_reader.sentence_reader import *
-from dataset_reader.context_reader import *
-from nn_model.context_model import *
-from nn_model.sentence_model import *
-from nn_model.em_model import EMSERModel
-from nn_model.multitask_model import MultiSERModel
-from nn_model.syn_model import SynSERModel
-from nn_model.entity_model import EntitySERModel
-from nn_model.entity_match_model import EntityMatchModel
+from .dataset_reader.sentence_reader import *
+from .dataset_reader.context_reader import *
+from .nn_model.context_model import *
+from .nn_model.sentence_model import *
+from .nn_model.em_model import EMSERModel
+from .nn_model.multitask_model import MultiSERModel
+from .nn_model.syn_model import SynSERModel
+from .nn_model.entity_model import EntitySERModel
+from .nn_model.entity_match_model import EntityMatchModel
 
 bert_model_name = config.BERT_EMBEDDING_ZH
 

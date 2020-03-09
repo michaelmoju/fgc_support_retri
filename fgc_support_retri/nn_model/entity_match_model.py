@@ -3,7 +3,6 @@ from transformers.modeling_bert import BertLayerNorm, BertEncoder, BertPooler, B
 import torch
 import torch.nn as nn
 import torch.nn.functional
-from fgc_support_retri.dataset_reader.sentence_reader import ETYPE_LIST
 
 
 class BertEmbeddingsPlus(nn.Module):

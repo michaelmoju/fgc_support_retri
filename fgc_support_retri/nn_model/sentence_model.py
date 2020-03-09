@@ -1,5 +1,4 @@
 from transformers import BertModel
-from transformers.modeling_bert import BertLayerNorm, BertEncoder, BertPooler, BertPreTrainedModel
 import torch
 import torch.nn as nn
 import torch.nn.functional
