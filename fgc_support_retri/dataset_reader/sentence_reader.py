@@ -52,29 +52,23 @@ class SerSentenceDataset(Dataset):
             string_pieces.append(input_string[char_b:char_e])
             out_ne[len(string_pieces) - 1] = normalize_etype(ne['type'])  #out_ne = {ne_piece_idx : etype]
             string_b = char_e
-        if string_b<len(input_string):
+        if string_b < len(input_string):
             string_pieces.append(input_string[string_b:])
         return out_ne, string_pieces
     
     @staticmethod
     def get_items_in_q(q, d):
-        for target_i, sentence in enumerate(d['SENTS']):
-            s_start = sentence['start']
-            s_end = sentence['end']
+        for target_i, s in enumerate(d['SENTS']):
+            q_ner_list = []
+            for q_sent in q['SENTS']:
+                for ne in q_sent['IE']['NER']:
+                    q_ner_list.append({'string': ne['string'],
+                                       'type': ne['type'],
+                                       'char_b': ne['char_b']+q_sent['start'],
+                                       'char_e': ne['char_e']+q_sent['start']})
+            q_ne, q_string_pieces = SerSentenceDataset.get_ne(q_ner_list, q['QTEXT_CN'])
         
-            q_ne, q_string_pieces = SerSentenceDataset.get_ne(q['QIE']['NER'], q['QTEXT_CN'])
-        
-            target_ne_list = []
-            for ne in d['DIE']['NER']:
-                if ne['char_b'] >= s_start and ne['char_e'] <= s_end:
-                    target_ne = {}
-                    target_ne['char_b'] = ne['char_b'] - s_start
-                    target_ne['char_e'] = ne['char_e'] - s_start
-                    target_ne['string'] = ne['string']
-                    target_ne['type'] = ne['type']
-                    target_ne_list.append(target_ne)
-        
-            s_ne, s_string_pieces = SerSentenceDataset.get_ne(target_ne_list, sentence['text'])
+            s_ne, s_string_pieces = SerSentenceDataset.get_ne(s['IE']['NER'], s['text'])
         
             other_context = ""
             context_sents = []
@@ -88,7 +82,7 @@ class SerSentenceDataset(Dataset):
                 atype = q['ATYPE']
             else:
                 atype = 'Misc'
-            out = {'QID': q['QID'], 'QTEXT': q['QTEXT_CN'], 'sentence': sentence['text'],
+            out = {'QID': q['QID'], 'QTEXT': q['QTEXT_CN'], 'sentence': s['text'],
                    'other_context': other_context, 'context_sents': context_sents, 'atype': atype,
                    'q_ne': q_ne, 'q_piece': q_string_pieces,
                    's_ne': s_ne, 's_piece': s_string_pieces}
@@ -100,57 +94,13 @@ class SerSentenceDataset(Dataset):
                     out['label'] = 0
         
             yield out
-    
-    @staticmethod
-    def get_sentence_pair(item):
-        for target_i, sentence in enumerate(item['SENTS']):
-            s_start = sentence['start']
-            s_end = sentence['end']
-            
-            q_ne, q_string_pieces = SerSentenceDataset.get_ne(item['Q_NER'], item['QTEXT'])
-            
-            target_ne_list = []
-            for ne in item['D_NER']:
-                if ne['char_b'] >= s_start and ne['char_e'] <= s_end:
-                    target_ne = {}
-                    target_ne['char_b'] = ne['char_b'] - s_start
-                    target_ne['char_e'] = ne['char_e'] - s_start
-                    target_ne['string'] = ne['string']
-                    target_ne['type'] = ne['type']
-                    target_ne_list.append(target_ne)
-                    
-            s_ne, s_string_pieces = SerSentenceDataset.get_ne(target_ne_list, sentence['text'])
-            
-            other_context = ""
-            context_sents = []
-            for context_i, context_s in enumerate(item['SENTS']):
-                if context_i != target_i:
-                    other_context += context_s['text']
-                    context_sents.append(context_s['text'])
-                    
-            if item['ATYPE']:
-                assert item['ATYPE'] in ATYPE_LIST
-                atype = item['ATYPE']
-            else:
-                atype = 'Misc'
-            out = {'QID': item['QID'], 'QTEXT': item['QTEXT'], 'sentence': sentence['text'],
-                   'other_context': other_context, 'context_sents': context_sents, 'atype': atype,
-                   'q_ne': q_ne, 'q_piece': q_string_pieces,
-                   's_ne': s_ne, 's_piece': s_string_pieces}
-            
-            if item['SUP_EVIDENCE']:
-                if target_i in item['SUP_EVIDENCE']:
-                    out['label'] = 1
-                else:
-                    out['label'] = 0
-                    
-            yield out
 
-    def __init__(self, items, transform=None):
+    def __init__(self, documents, transform=None):
         instances = []
-        for item in items:
-            for instance in self.get_sentence_pair(item):
-                instances.append(instance)
+        for d in documents:
+            for q in d['QUESTIONS']:
+                for instance in self.get_items_in_q(q, d):
+                    instances.append(instance)
         self.instances = instances
         self.transform = transform
     
