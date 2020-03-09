@@ -38,36 +38,7 @@ class SER_Trainer:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.device = device
         
-    def callback(self):
-    
-        if atype_preds:
-            metrics = eval_sp_fgc(sp_golds, sp_preds)
-            atype_accuracy = eval_fgc_atype(dev_items, atype_preds)
-            print('epoch %d eval_f1: %.3f atype_acc: %.3f' % (epoch_i, metrics['sp_f1'], atype_accuracy))
-        
-            model_to_save = model.module if hasattr(model, 'module') else model
-        
-            torch.save(model_to_save.state_dict(),
-                       str(trained_model_path / "model_epoch{0}_eval_f1_{1:.3f}_atype_{2:.3f}.m".format(
-                           epoch_i, metrics['sp_f1'],
-                           atype_accuracy)))
-    
-        else:
-            metrics = eval_sp_fgc(sp_golds, sp_preds)
-            print('epoch %d eval_recall: %.3f eval_f1: %.3f' % (
-                epoch_i, metrics['sp_recall'], metrics['sp_f1']))
-        
-            model_to_save = model.module if hasattr(model, 'module') else model
-        
-            torch.save(model_to_save.state_dict(),
-                       str(
-                           trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}.m".
-                           format(epoch_i, metrics['sp_em'], metrics['sp_prec'], metrics['sp_recall'],
-                                  metrics['sp_f1'])))
-        
-            
-        
-    def eval(self, dev_documents):
+    def eval(self, dev_documents, epoch_i, trained_model_path):
         self.model.eval()
     
         with torch.no_grad():
@@ -94,12 +65,31 @@ class SER_Trainer:
                             assert type_i == out_dct['atype'][0]
                         atype_preds.append(type_i)
                         atype_golds.append(q['ATYPE'])
-                        
+
         if atype_preds:
             metrics = eval_sp_fgc(sp_golds, sp_preds)
-            atype_accuracy = eval_fgc_atype(dev_items, atype_preds)
-            
-        return sp_golds, sp_preds, atype_golds, atype_preds
+            atype_accuracy = eval_fgc_atype(atype_golds, atype_preds)
+            print('epoch %d eval_f1: %.3f atype_acc: %.3f' % (epoch_i, metrics['sp_f1'], atype_accuracy))
+    
+            model_to_save = self.model.module if hasattr(self.model, 'module') else self.model
+    
+            torch.save(model_to_save.state_dict(),
+                       str(trained_model_path / "model_epoch{0}_eval_f1_{1:.3f}_atype_{2:.3f}.m".format(
+                           epoch_i, metrics['sp_f1'],
+                           atype_accuracy)))
+
+        else:
+            metrics = eval_sp_fgc(sp_golds, sp_preds)
+            print('epoch %d eval_recall: %.3f eval_f1: %.3f' % (
+                epoch_i, metrics['sp_recall'], metrics['sp_f1']))
+    
+            model_to_save = self.model.module if hasattr(self.model, 'module') else self.model
+    
+            torch.save(model_to_save.state_dict(),
+                       str(
+                           trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}.m".
+                           format(epoch_i, metrics['sp_em'], metrics['sp_prec'], metrics['sp_recall'],
+                                  metrics['sp_f1'])))
                     
     def train(self, num_epochs, batch_size, model_file_name):
         
@@ -145,8 +135,8 @@ class SER_Trainer:
                 optimizer.zero_grad()
         
                 for key in self.input_names:
-                    batch[key] = batch[key].to(device)
-                batch['label'] = batch['label'].to(dtype=torch.float, device=device)
+                    batch[key] = batch[key].to(self.device)
+                batch['label'] = batch['label'].to(dtype=torch.float, device=self.device)
         
                 loss = self.model(batch)
         
@@ -161,80 +151,12 @@ class SER_Trainer:
             print('epoch %d train_loss: %.3f' % (epoch_i, running_loss / len(dataloader_train)))
     
             if epoch_i % self.eval_frequency == 0:
-                self.eval(dev_documents)
-                
-                
-                
-
-def _train_bert_ser_model(num_epochs, batch_size, model_file_name, model, collate_fn, indexer, input_names):
-
-    
-    print('start training ... ')
-    for epoch_i in range(num_epochs + 1):
-        model.train()
-        running_loss = 0.0
-        for batch_i, batch in enumerate(tqdm(dataloader_train)):
-            optimizer.zero_grad()
-            
-            for key in input_names:
-                batch[key] = batch[key].to(device)
-            batch['label'] = batch['label'].to(dtype=torch.float, device=device)
-            
-            loss = model(batch)
-            
-            if n_gpu > 1:
-                loss = loss.mean()  # mean() to average on multi-gpu.
-            
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-            running_loss += loss.item()
-        
-        print('epoch %d train_loss: %.3f' % (epoch_i, running_loss / len(dataloader_train)))
-        
-        if epoch_i % eval_frequency == 0:
-            model.eval()
-            
-            with torch.no_grad():
-                predictions = []
-                atypes = []
-
-                for item in tqdm(dev_items):
-                    dev_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([indexer]))
-                    batch = collate_fn([sample for sample in dev_set])
-                    for key in input_names:
-                        batch[key] = batch[key].to(device)
-                    
-                    out_dct = model.module.predict_fgc(batch)
-                    predictions.append(out_dct['sp'])
-                    if 'atype' in out_dct:
-                        for type_i in out_dct['atype']:
-                            assert type_i == out_dct['atype'][0]
-                        atypes.append(atype[0])
-                
-                if atypes:
-                    metrics = eval_sp_fgc(dev_items, predictions)
-                    atype_accuracy = eval_fgc_atype(dev_items, atypes)
-                    print('epoch %d eval_f1: %.3f atype_acc: %.3f' % (epoch_i, metrics['sp_f1'], atype_accuracy))
-
-                    model_to_save = model.module if hasattr(model, 'module') else model
-
-                    torch.save(model_to_save.state_dict(),
-                           str(trained_model_path / "model_epoch{0}_eval_f1_{1:.3f}_atype_{2:.3f}.m".format(epoch_i, metrics['sp_f1'], 
-                                                                                                            atype_accuracy)))
-                
-                else:
-                    metrics = eval_sp_fgc(dev_items, predictions)
-                    print('epoch %d eval_recall: %.3f eval_f1: %.3f' % (epoch_i, metrics['sp_recall'], metrics['sp_f1']))
-
-                    model_to_save = model.module if hasattr(model, 'module') else model
-
-                    torch.save(model_to_save.state_dict(),
-                               str(trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}.m".
-                                   format(epoch_i, metrics['sp_em'], metrics['sp_prec'], metrics['sp_recall'], metrics['sp_f1'])))
+                self.eval(dev_documents, epoch_i, trained_model_path)
 
 
 def train_entity_match_model(num_epochs, batch_size, model_file_name):
+    dataset_reader = CrossSentDataset
+    
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
     pretrained_bert = BertModel.from_pretrained(bert_model_name)
     pretrained_bert.eval()
@@ -245,11 +167,13 @@ def train_entity_match_model(num_epochs, batch_size, model_file_name):
     indexer = Idx(tokenizer, pretrained_bert)
     input_names = ['input_ids', 'token_type_ids', 'attention_mask',
                    'tf_type', 'idf_type', 'atype_ent_match', 'label']
-    _train_bert_ser_model(num_epochs, batch_size, model_file_name,
-                          model, collate_fn, indexer, input_names)
+    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names)
+    trainer.train(num_epochs, batch_size, model_file_name)
 
 
 def train_entity_model(num_epochs, batch_size, model_file_name):
+    dataset_reader = SerSentenceDataset
+    
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
     pretrained_bert = BertModel.from_pretrained(bert_model_name)
     pretrained_bert.eval()
@@ -261,11 +185,13 @@ def train_entity_model(num_epochs, batch_size, model_file_name):
     indexer = Idx(tokenizer, pretrained_bert)
     input_names = ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 
                    'tf_type', 'idf_type', 'sf_type', 'qsim_type', 'atype_label', 'etype_ids', 'label']
-    _train_bert_ser_model(num_epochs, batch_size, model_file_name,
-                          model, collate_fn, indexer, input_names)
+    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names)
+    trainer.train(num_epochs, batch_size, model_file_name)
 
 
 def train_MultiSERModel(num_epochs, batch_size, model_file_name):
+    dataset_reader = SerSentenceDataset
+    
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
     pretrained_bert = BertModel.from_pretrained(bert_model_name)
     pretrained_bert.eval()
@@ -280,11 +206,13 @@ def train_MultiSERModel(num_epochs, batch_size, model_file_name):
     indexer = SynIdx(tokenizer, pretrained_bert)
     input_names = ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type',
                         'qsim_type', 'atype_label', 'label']
-    _train_bert_ser_model(num_epochs, batch_size, model_file_name,
-                          model, collate_fn, indexer, input_names)
+    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names)
+    trainer.train(num_epochs, batch_size, model_file_name)
     
 
 def train_SynSERModel(num_epochs, batch_size, model_file_name):
+    dataset_reader = SerSentenceDataset
+    
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
     pretrained_bert = BertModel.from_pretrained(bert_model_name)
     pretrained_bert.eval()
@@ -295,11 +223,13 @@ def train_SynSERModel(num_epochs, batch_size, model_file_name):
     collate_fn = Syn_collate
     indexer = SynIdx(tokenizer, pretrained_bert)
     input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type', 'qsim_type', 'label']
-    _train_bert_ser_model(num_epochs, batch_size, model_file_name, 
-                          model, collate_fn, indexer, input_names)
+    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names)
+    trainer.train(num_epochs, batch_size, model_file_name)
    
 
 def train_EMSERModel(num_epochs, batch_size, model_file_name):
+    dataset_reader = SerSentenceDataset
+    
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
     pretrained_bert = BertModel.from_pretrained(bert_model_name)
     pretrained_bert.eval()
@@ -311,8 +241,8 @@ def train_EMSERModel(num_epochs, batch_size, model_file_name):
     indexer = Idx(tokenizer, pretrained_bert)
     input_names = ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type',
                         'qsim_type', 'label']
-    _train_bert_ser_model(num_epochs, batch_size, model_file_name, 
-                          model, collate_fn, indexer, input_names)
+    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names)
+    trainer.train(num_epochs, batch_size, model_file_name)
 
 
 

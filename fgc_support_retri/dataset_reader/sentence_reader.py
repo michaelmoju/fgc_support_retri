@@ -57,6 +57,51 @@ class SerSentenceDataset(Dataset):
         return out_ne, string_pieces
     
     @staticmethod
+    def get_items_in_q(q, d):
+        for target_i, sentence in enumerate(d['SENTS']):
+            s_start = sentence['start']
+            s_end = sentence['end']
+        
+            q_ne, q_string_pieces = SerSentenceDataset.get_ne(q['QIE']['NER'], q['QTEXT_CN'])
+        
+            target_ne_list = []
+            for ne in d['DIE']['NER']:
+                if ne['char_b'] >= s_start and ne['char_e'] <= s_end:
+                    target_ne = {}
+                    target_ne['char_b'] = ne['char_b'] - s_start
+                    target_ne['char_e'] = ne['char_e'] - s_start
+                    target_ne['string'] = ne['string']
+                    target_ne['type'] = ne['type']
+                    target_ne_list.append(target_ne)
+        
+            s_ne, s_string_pieces = SerSentenceDataset.get_ne(target_ne_list, sentence['text'])
+        
+            other_context = ""
+            context_sents = []
+            for context_i, context_s in enumerate(d['SENTS']):
+                if context_i != target_i:
+                    other_context += context_s['text']
+                    context_sents.append(context_s['text'])
+        
+            if q['ATYPE']:
+                assert q['ATYPE'] in ATYPE_LIST
+                atype = q['ATYPE']
+            else:
+                atype = 'Misc'
+            out = {'QID': q['QID'], 'QTEXT': q['QTEXT_CN'], 'sentence': sentence['text'],
+                   'other_context': other_context, 'context_sents': context_sents, 'atype': atype,
+                   'q_ne': q_ne, 'q_piece': q_string_pieces,
+                   's_ne': s_ne, 's_piece': s_string_pieces}
+        
+            if q['SHINT']:
+                if target_i in q['SHINT']:
+                    out['label'] = 1
+                else:
+                    out['label'] = 0
+        
+            yield out
+    
+    @staticmethod
     def get_sentence_pair(item):
         for target_i, sentence in enumerate(item['SENTS']):
             s_start = sentence['start']
