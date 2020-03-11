@@ -276,19 +276,19 @@ class Idx:
     
         if len(tokenized_all) > 511:
             print("tokenized all > 511 id:{}".format(sample['QID']))
-            tokenized_all = tokenized_all[:512]
-            tf_match = tf_match[:512]
-            idf_match = idf_match[:512]
-            sf_type = sf_type[:512]
-            qsim_type = qsim_type[:512]
-            etype_all = etype_all[:512]
-            atype_ent_match = atype_ent_match[:512]
+            tokenized_all = tokenized_all[:511]
+            tf_match = tf_match[:511]
+            idf_match = idf_match[:511]
+            sf_type = sf_type[:511]
+            qsim_type = qsim_type[:511]
+            etype_all = etype_all[:511]
+            atype_ent_match = atype_ent_match[:511]
     
         if len(tokenized_q) > 511:
             print("tokenized question > 511 id:{}".format(sample['QID']))
-            tokenized_q = tokenized_q[:512]
+            tokenized_q = tokenized_q[:511]
             tokenized_q += ['[SEP]']
-            etype_q = etype_q[:512]
+            etype_q = etype_q[:511]
             etype_q += [ETYPE2id['O']]
     
         tokenized_all += ['[SEP]']

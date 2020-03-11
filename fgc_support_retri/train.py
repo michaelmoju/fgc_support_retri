@@ -11,6 +11,7 @@ from .utils import read_fgc, json_load
 from .dataset_reader.context_reader import *
 from .dataset_reader.sentence_reader import *
 from .dataset_reader.cross_sent_reader import *
+from .dataset_reader.sentence_group_reader import * 
 from .nn_model.context_model import *
 from .nn_model.sentence_model import *
 from .nn_model.em_model import EMSERModel
@@ -18,6 +19,7 @@ from .nn_model.syn_model import SynSERModel
 from .nn_model.multitask_model import MultiSERModel
 from .nn_model.entity_model import EntitySERModel
 from .nn_model.entity_match_model import EntityMatchModel
+from .nn_model.sgroup_model import SGroupModel
 from .eval_old import evalaluate_f1
 from .evaluation.eval import eval_sp_fgc, eval_fgc_atype
 
@@ -155,6 +157,23 @@ class SER_Trainer:
             if epoch_i % self.eval_frequency == 0:
                 self.eval(dev_documents, epoch_i, trained_model_path)
 
+                
+def train_sgroup_model(num_epochs, batch_size, model_file_name):
+    dataset_reader = SerSGroupDataset
+    
+    tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+    pretrained_bert = BertModel.from_pretrained(bert_model_name)
+    pretrained_bert.eval()
+    
+    model = SGroupModel.from_pretrained(bert_model_name)
+    
+    collate_fn = SGroup_collate
+    indexer = SGroupIdx(tokenizer, pretrained_bert)
+    input_names = ['input_ids', 'token_type_ids', 'attention_mask',
+                   'tf_type', 'idf_type', 'atype_ent_match', 'label']
+    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names)
+    trainer.train(num_epochs, batch_size, model_file_name)
+    
 
 def train_entity_match_model(num_epochs, batch_size, model_file_name):
     dataset_reader = CrossSentDataset

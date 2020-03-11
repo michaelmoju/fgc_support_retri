@@ -5,6 +5,8 @@ from tqdm import tqdm
 from . import config
 from .dataset_reader.sentence_reader import *
 from .dataset_reader.context_reader import *
+from .dataset_reader.cross_sent_reader import *
+from .dataset_reader.sentence_group_reader import * 
 from .nn_model.context_model import *
 from .nn_model.sentence_model import *
 from .nn_model.em_model import EMSERModel
@@ -12,6 +14,7 @@ from .nn_model.multitask_model import MultiSERModel
 from .nn_model.syn_model import SynSERModel
 from .nn_model.entity_model import EntitySERModel
 from .nn_model.entity_match_model import EntityMatchModel
+from .nn_model.sgroup_model import SGroupModel
 
 bert_model_name = config.BERT_EMBEDDING_ZH
 
@@ -51,9 +54,9 @@ class Extractor:
             out_dct = self.model.predict_fgc(batch)
             
             if 'sp' in q:
-                sp_preds.append(list(set(q['sp']) | set(out_dct['sp'])))
+                sp_preds = list(set(q['sp']) | set(out_dct['sp']))
             else:
-                sp_preds.append(out_dct['sp'])
+                sp_preds = out_dct['sp']
                 
             if 'atype' in out_dct:
                 for type_i in out_dct['atype']:
@@ -78,6 +81,25 @@ class Extractor:
             predictions = self.predict(items)
             all_predictions.append(predictions)
         return all_predictions
+    
+
+class Sgroup_extractor(Extractor):
+    def __init__(self):
+        input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'atype_ent_match']
+        dataset_reader = SerSGroupDataset
+        super(Sgroup_extractor, self).__init__(input_names, dataset_reader)
+    
+        model = SGroupModel.from_pretrained(bert_model_name)
+        model_path = config.TRAINED_MODELS / '20200304_entity_match_lr=2e-5' / 'model_epoch17_eval_em:0.147_precision:0.628_recall:0.578_f1:0.555.m'
+        model.load_state_dict(torch.load(model_path, map_location=self.device))
+        model.to(self.device)
+        model.eval()
+        self.model = model
+    
+        pretrained_bert = BertModel.from_pretrained(bert_model_name)
+        pretrained_bert.eval()
+        self.indexer = SGroupIdx(self.tokenizer, pretrained_bert)
+        self.collate_fn = SGroup_collate
 
 
 class EntityMatch_extractor(Extractor):
