@@ -19,7 +19,7 @@ from .nn_model.sgroup_model import SGroupModel
 bert_model_name = config.BERT_EMBEDDING_ZH
 
 class Extractor:
-    def __init__(self, input_names, dataset_reader):
+    def __init__(self, input_names, dataset_reader, indexer, collate_fn):
         self.input_names = input_names
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #         device = torch.device("cpu")
@@ -28,26 +28,13 @@ class Extractor:
         bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
         self.tokenizer = bert_tokenizer
         self.dataset_reader = dataset_reader
-        
-    @staticmethod
-    def get_item(document):
-        for question in document['QUESTIONS']:
-            yield self.get_item_from_question(question, document)
-    
-    @staticmethod  
-    def get_item_from_question(question, document):
-        out = {'QID': question['QID'], 'SENTS': document['SENTS'], 
-                   'Q_NER': question['QIE']['NER'], 'D_NER': document['DIE']['NER'],
-                   'QTEXT': question['QTEXT_CN'], 'SUP_EVIDENCE': [], 'ATYPE': question['ATYPE']}
-        yield out
+        self.indexer = indexer
+        self.collate_fn = collate_fn
     
     def predict(self, q, d):
-        sp_preds = []
-        atype_preds = []
-        
         with torch.no_grad():
-            q_instances = [self.indexer(item) for item in self.dataset_reader.get_items_in_q(q, d)]
-            batch = self.collate_fn(q_instances)
+            sentence_instances = [self.indexer(item) for item in self.dataset_reader.get_items_in_q(q, d)]
+            batch = self.collate_fn(sentence_instances)
             for key in self.input_names:
                 batch[key] = batch[key].to(self.device)
             
@@ -61,26 +48,19 @@ class Extractor:
             if 'atype' in out_dct:
                 for type_i in out_dct['atype']:
                     assert type_i == out_dct['atype'][0]
-                atype_preds.append(type_i)
+                atype = type_i
+            
+            if 'sp_scores' in out_dct:
+                sp_scores = out_dct['sp_scores']
 
-        return sp_preds, atype_preds
-    
-    def predict_score(self, item):
-        with torch.no_grad():
-            test_set = SerSentenceDataset([item], transform=torchvision.transforms.Compose([self.indexer]))
-            batch = self.collate_fn([sample for sample in test_set])
-            for key in self.input_names:
-                batch[key] = batch[key].to(self.device)
-            score_list = self.model.predict_score(batch)
-        return score_list
+        return sp_preds, atype, sp_scores
 
     def predict_all_documents(self, documents):
-        all_predictions = []
-        for document in tqdm(documents):
-            items = [item for item in self.get_item(document)]
-            predictions = self.predict(items)
-            all_predictions.append(predictions)
-        return all_predictions
+        for d in documents:
+            for q in d['QUESTIONS']:
+                sp_preds, atype_preds, sp_scores = self.predict(q, d)
+                q['sp'] = sp_preds
+                q['sp_scores'] = sp_scores
     
 
 class Sgroup_extractor(Extractor):

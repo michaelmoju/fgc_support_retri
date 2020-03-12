@@ -51,6 +51,8 @@ class SER_Trainer:
             
             for d in dev_documents:
                 for q in d['QUESTIONS']:
+                    if len(d['SENTS']) == 1:
+                        continue
                     q_instances = [self.indexer(item) for item in self.dataset_reader.get_items_in_q(q, d)]
                     batch = self.collate_fn(q_instances)
                     for key in self.input_names:

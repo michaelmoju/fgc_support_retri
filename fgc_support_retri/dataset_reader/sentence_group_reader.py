@@ -57,7 +57,7 @@ class SerSGroupDataset(Dataset):
         return out_ne, string_pieces
     
     @staticmethod
-    def get_items_in_q(q, d):
+    def get_items_in_q(q, d, is_training=False):
         for target_i, s in enumerate(d['SENTS']):
             q_ner_list = []
             for q_sent in q['SENTS']:
@@ -93,25 +93,21 @@ class SerSGroupDataset(Dataset):
                    's_ne': s_ne, 's_piece': s_string_pieces,
                    'pre_s_ne': pre_s_ne, 'pre_s_piece': pre_s_piece,
                    'post_s_ne': post_s_ne, 'post_s_piece': post_s_piece}
-        
-            if q['SHINT']:
+            
+            if is_training:
                 if target_i in q['SHINT']:
                     out['label'] = 1
                 else:
                     out['label'] = 0
-            else:
-                continue
-                
-            if len(d['SENTS']) == 1:
-                continue
-        
             yield out
 
     def __init__(self, documents, transform=None):
         instances = []
         for d in documents:
             for q in d['QUESTIONS']:
-                for instance in self.get_items_in_q(q, d):
+                if len(d['SENTS']) == 1:
+                    continue
+                for instance in self.get_items_in_q(q, d, is_training=True):
                     instances.append(instance)
         self.instances = instances
         self.transform = transform
@@ -195,9 +191,11 @@ class SGroupIdx:
         return False
     
     def compare_match(self, tokenized_a, a_embeds, etype_a, tokenized_b, b_embeds, tokenized_context, context_tokenized_sents, context_sents_num, atype):
+        eps = 1e-6
         tf_match_a = [0] * len(tokenized_a)
         idf_match_a = [0] * len(tokenized_a)
         sf_type_a = [0] * len(tokenized_a)
+        sf_score_a = []
         qsim_a = [0] * len(tokenized_a)
         atype_ent_match_a = [0] * len(tokenized_a)
         
@@ -212,15 +210,13 @@ class SGroupIdx:
                 if token_a in tset:
                     sfreq += 1
             sf_score = sfreq / context_sents_num
+            sf_score_a = 1 - sf_score + eps
             for level, bound in enumerate(self.sf_level_list):
                 if bound[0] <= sf_score < bound[1]:
                     sf_type_a[i] = level
-            try:
-                asim_score = max(F.cosine_similarity(a_emb, b_embeds, dim=-1))
-            except:
-                print('sentence_group_reader.py line216')
-                print(tokenized_a)
-                print(tokenized_b)
+
+            asim_score = max(F.cosine_similarity(a_emb, b_embeds, dim=-1))
+
             for level, bound in enumerate(self.qsim_level_list):
                 if bound[0] <= asim_score < bound[1]:
                     qsim_a[i] = level
@@ -228,7 +224,7 @@ class SGroupIdx:
             if self.is_matched_atype_etype(atype, id2ETYPE[etype_a[i]]):
                 atype_ent_match_a[i] = 1
         
-        return tf_match_a, idf_match_a, sf_type_a, qsim_a, atype_ent_match_a
+        return tf_match_a, idf_match_a, sf_type_a, qsim_a, atype_ent_match_a, sf_score_a
     
     def __call__(self, sample):
     
@@ -256,16 +252,16 @@ class SGroupIdx:
         atype = sample['atype']
         atype_label = ATYPE2id[atype]
         # q
-        tf_match_q, idf_match_q, sf_type_q, qsim_q, atype_ent_match_q = \
+        tf_match_q, idf_match_q, sf_type_q, qsim_q, atype_ent_match_q, sf_score_q = \
             self.compare_match(tokenized_q, q_embeds, etype_q, tokenized_s, s_embeds, tokenized_context, context_tokenized_sents, context_sents_num, atype)
         # target
-        tf_match_s, idf_match_s, sf_type_s, qsim_s, atype_ent_match_s = \
+        tf_match_s, idf_match_s, sf_type_s, qsim_s, atype_ent_match_s, sf_score_s = \
             self.compare_match(tokenized_s, s_embeds, etype_s, tokenized_q, q_embeds, tokenized_context, context_tokenized_sents, context_sents_num, atype)
         # pre
-        tf_match_pre, idf_match_pre, sf_type_pre, qsim_pre, atype_ent_match_pre = \
+        tf_match_pre, idf_match_pre, sf_type_pre, qsim_pre, atype_ent_match_pre, sf_score_pre = \
             self.compare_match(tokenized_s_pre, s_pre_embeds, etype_pre, tokenized_q, q_embeds, tokenized_context, context_tokenized_sents, context_sents_num, atype)
         # post
-        tf_match_post, idf_match_post, sf_type_post, qsim_post, atype_ent_match_post = \
+        tf_match_post, idf_match_post, sf_type_post, qsim_post, atype_ent_match_post, sf_score_post = \
             self.compare_match(tokenized_s_post, s_post_embeds, etype_post, tokenized_q, q_embeds, tokenized_context, context_tokenized_sents, context_sents_num, atype)
 
         tokenized_all = ['[CLS]'] + tokenized_q + ['[SEP]'] + tokenized_s_pre + ['[SEP]'] + tokenized_s + ['[SEP]'] + tokenized_s_post
@@ -275,9 +271,8 @@ class SGroupIdx:
         sf_type = [self.sf_level - 1] + sf_type_q + [self.sf_level - 1] + sf_type_pre + [self.sf_level - 1] + sf_type_s + [self.sf_level - 1] + sf_type_post
         qsim_type = [0] + qsim_q + [0] + qsim_pre + [0] + qsim_s + [0] + qsim_post
         atype_ent_match = [0] + atype_ent_match_q + [0] + atype_ent_match_pre + [0] + atype_ent_match_s + [0] + atype_ent_match_post
-        
-        
         token_type_ids = [0] + [0] * len(tokenized_q) + [0] + [1] * len(tokenized_s_pre) + [1] + [2] * len(tokenized_s) + [2] + [3] * len(tokenized_s_post) + [3]
+        sf_score_all = [1] + sf_score_q + [1] + sf_score_pre + [1] + sf_score_s + [1] + sf_score_post
         
         if len(tokenized_all) > 511:
             if DEBUG > 0:
@@ -289,6 +284,7 @@ class SGroupIdx:
             qsim_type = qsim_type[:511]
             etype_all = etype_all[:511]
             atype_ent_match = atype_ent_match[:511]
+            sf_score_all = sf_score_all[:511]
             token_type_ids = token_type_ids[:512]
     
         tokenized_all += ['[SEP]']
@@ -298,9 +294,10 @@ class SGroupIdx:
         sf_type += [self.sf_level - 1]
         qsim_type += [0]
         atype_ent_match += [0]
+        sf_score_all += [1]
     
         ids_all = self.tokenizer.convert_tokens_to_ids(tokenized_all)
-        ids_q = self.tokenizer.convert_tokens_to_ids(tokenized_q)
+        
         if not ids_all:
             print(ids_all)
             print(sample)
@@ -315,6 +312,7 @@ class SGroupIdx:
         sample['etype_ids'] = etype_all
         sample['atype_label'] = atype_label
         sample['atype_ent_match'] = atype_ent_match
+        sample['sf_score'] = sf_score_all
     
         return sample
     
@@ -329,6 +327,7 @@ def SGroup_collate(batch):
     qsim_type = pad_sequence([torch.tensor(sample['qsim_type']) for sample in batch], batch_first=True)
     etype_ids = pad_sequence([torch.tensor(sample['etype_ids']) for sample in batch], batch_first=True)
     atype_ent_match = pad_sequence([torch.tensor(sample['atype_ent_match']) for sample in batch], batch_first=True)
+    sf_score = pad_sequence([torch.tensor(sample['sf_score']) for sample in batch], batch_first=True)
     
     out = {'input_ids': input_ids_batch,
            'token_type_ids': token_type_ids_batch,
@@ -338,7 +337,8 @@ def SGroup_collate(batch):
            'sf_type': sf_type,
            'qsim_type': qsim_type,
            'atype_ent_match': atype_ent_match,
-           'etype_ids': etype_ids}
+           'etype_ids': etype_ids,
+           'sf_score': sf_score}
     
     if 'label' in batch[0].keys():
         out['label'] = torch.tensor([sample['label'] for sample in batch])

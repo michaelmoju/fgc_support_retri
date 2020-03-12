@@ -22,7 +22,7 @@ class BertEmbeddingsPlus(nn.Module):
 		self.dropout = nn.Dropout(config.hidden_dropout_prob)
 	
 	def forward(self, input_ids, token_type_ids=None, position_ids=None, inputs_embeds=None, tf_type=None,
-	            idf_type=None, atype_ent_match=None):
+	            idf_type=None, atype_ent_match=None, sf_score=None):
 		if input_ids is not None:
 			input_shape = input_ids.size()
 		else:
@@ -44,6 +44,8 @@ class BertEmbeddingsPlus(nn.Module):
 			idf_type = torch.zeros(input_shape, dtype=torch.long, device=device)
 		if inputs_embeds is None:
 			inputs_embeds = self.word_embeddings(input_ids)
+		if sf_score is None:
+			sf_score = torch.ones(input_ids.size(), dtype=torch.long, device=device)
 		
 		position_embeddings = self.position_embeddings(position_ids)
 		ae_match_embeddings = self.ae_match_embeddings((atype_ent_match > 0).long())
@@ -56,9 +58,10 @@ class BertEmbeddingsPlus(nn.Module):
 				+ position_embeddings
 				+ token_type_embeddings
                 + tf_embeddings
-				+ idf_embeddings
 				+ ae_match_embeddings
 		)
+		
+		embeddings = torch.mul(embeddings, sf_score)
 		
 		embeddings = self.LayerNorm(embeddings)
 		embeddings = self.dropout(embeddings)
@@ -74,7 +77,7 @@ class BertModelPlus(BertModel):
 		self.init_weights()
 	
 	def forward(self, input_ids=None, tf_type=None, idf_type=None, token_type_ids=None, attention_mask=None,
-	            position_ids=None, atype_ent_match=None,
+	            position_ids=None, atype_ent_match=None, sf_score=None,
 	            head_mask=None, inputs_embeds=None, encoder_hidden_states=None, encoder_attention_mask=None):
 		
 		if input_ids is not None and inputs_embeds is not None:
@@ -161,7 +164,8 @@ class BertModelPlus(BertModel):
 		embedding_output = self.embeddings(input_ids=input_ids, tf_type=tf_type, idf_type=idf_type,
 		                                   position_ids=position_ids, token_type_ids=token_type_ids,
 		                                   inputs_embeds=inputs_embeds,
-		                                   atype_ent_match=atype_ent_match)
+		                                   atype_ent_match=atype_ent_match,
+		                                   sf_score=sf_score)
 		encoder_outputs = self.encoder(embedding_output,
 		                               attention_mask=extended_attention_mask,
 		                               head_mask=head_mask,
@@ -183,14 +187,12 @@ class SGroupModel(BertPreTrainedModel):
 		self.classifier = nn.Linear(config.hidden_size, 1)
 		self.criterion = nn.BCEWithLogitsLoss()
 	
-	def to_mode(self, mode):
-		self.mode = mode
-	
 	def forward_nn(self, batch):
-		_, q_poolout = self.bert(batch['input_ids'], batch['tf_type'], batch['idf_type'],
+		_, q_poolout = self.bert(batch['input_ids'], batch['tf_type'],
 		                         token_type_ids=batch['token_type_ids'],
 		                         attention_mask=batch['attention_mask'],
-		                         atype_ent_match=batch['atype_ent_match']
+		                         atype_ent_match=batch['atype_ent_match'],
+		                         sf_score=batch['sf_score']
 		                         )
 		
 		dr_pooled_output = self.dropout(q_poolout)
@@ -214,10 +216,7 @@ class SGroupModel(BertPreTrainedModel):
 		return scores
 	
 	def predict_fgc(self, batch, threshold=0.5):
-		logits = self.forward_nn(batch)
-		scores = torch.sigmoid(logits)
-		scores = scores.cpu().numpy().tolist()
-		
+		scores = self.predict_score(batch)
 		score_list = [(i, score) for i, score in enumerate(scores)]
 		
 		max_i = 0
@@ -232,4 +231,4 @@ class SGroupModel(BertPreTrainedModel):
 		if not prediction:
 			prediction.append(max_i)
 		
-		return {'sp': prediction}
+		return {'sp': prediction, 'sp_scores': scores}
