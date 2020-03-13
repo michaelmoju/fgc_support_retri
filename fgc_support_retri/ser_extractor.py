@@ -100,8 +100,8 @@ class EntityMatch_extractor(Extractor):
     
         pretrained_bert = BertModel.from_pretrained(bert_model_name)
         pretrained_bert.eval()
-        self.indexer = Idx(self.tokenizer, pretrained_bert)
-        self.collate_fn = Syn_collate
+        self.indexer = SentIdx(self.tokenizer, pretrained_bert)
+        self.collate_fn = Sent_collate
 
 class Entity_extractor(Extractor):
     def __init__(self):
@@ -118,8 +118,8 @@ class Entity_extractor(Extractor):
         
         pretrained_bert = BertModel.from_pretrained(bert_model_name)
         pretrained_bert.eval()
-        self.indexer = Idx(self.tokenizer, pretrained_bert)
-        self.collate_fn = Syn_collate
+        self.indexer = SentIdx(self.tokenizer, pretrained_bert)
+        self.collate_fn = Sent_collate
 
 
 class Syn_extractor(Extractor):
@@ -138,7 +138,7 @@ class Syn_extractor(Extractor):
         pretrained_bert = BertModel.from_pretrained(bert_model_name)
         pretrained_bert.eval()
         self.indexer = SynIdx(self.tokenizer, pretrained_bert)
-        self.collate_fn = Syn_collate
+        self.collate_fn = Sent_collate
         
 
 class MultiTask_extractor(Extractor):
@@ -157,7 +157,7 @@ class MultiTask_extractor(Extractor):
         pretrained_bert = BertModel.from_pretrained(bert_model_name)
         pretrained_bert.eval()
         self.indexer = SynIdx(self.tokenizer, pretrained_bert)
-        self.collate_fn = Syn_collate
+        self.collate_fn = Sent_collate
 
 
 class EMSER_extractor(Extractor):
@@ -183,7 +183,7 @@ class SER_sent_extract_V1(Extractor):
         super(SER_context_extract_V1, self).__init__(input_names)
         
         bert_encoder = BertModel.from_pretrained(bert_model_name)
-        model = BertSentenceSupModel_V1(bert_encoder)
+        model = BertSERModel(bert_encoder)
 #         model_path = config.TRAINED_MODELS / '20191129-with_hotpot'/ 'model_epoch5_loss_0.226.m'
 #         model_path = config.TRAINED_MODELS / '20191128'/ 'model_epoch5_loss_0.213.m' 
         model_path = config.TRAINED_MODELS / '20200102_sent_V1' / 'model_epoch10_eval_recall_0.025_f1_0.034.m'

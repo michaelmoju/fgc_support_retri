@@ -195,8 +195,8 @@ class SGroupModel(BertPreTrainedModel):
 		                         sf_score=batch['sf_score']
 		                         )
 		
-		dr_pooled_output = self.dropout(q_poolout)
-		logits = self.classifier(dr_pooled_output)
+		# q_poolout = self.dropout(q_poolout)
+		logits = self.classifier(q_poolout)
 		logits = logits.squeeze(-1)
 		return logits
 	
@@ -205,30 +205,25 @@ class SGroupModel(BertPreTrainedModel):
 		loss = self.criterion(logits, batch['label'])
 		return loss
 	
-	def _predict(self, logits):
+	def _predict(self, batch):
+		logits = self.forward_nn(batch)
 		scores = torch.sigmoid(logits)
 		scores = scores.cpu().numpy().tolist()
 		return scores
 	
-	def predict_score(self, batch):
-		logits = self.forward_nn(batch)
-		scores = self._predict(logits)
-		return scores
-	
-	def predict_fgc(self, batch, threshold=0.5):
-		scores = self.predict_score(batch)
-		score_list = [(i, score) for i, score in enumerate(scores)]
+	def predict_fgc(self, q_batch, threshold=0.5):
+		scores = self._predict(q_batch)
 		
 		max_i = 0
 		max_score = 0
-		prediction = []
-		for i, score in score_list:
+		sp = []
+		for i, score in enumerate(scores):
 			if score > max_score:
 				max_i = i
 			if score >= threshold:
-				prediction.append(i)
+				sp.append(i)
 		
-		if not prediction:
-			prediction.append(max_i)
+		if not sp:
+			sp.append(max_i)
 		
-		return {'sp': prediction, 'sp_scores': scores}
+		return {'sp': sp, 'sp_scores': scores}
