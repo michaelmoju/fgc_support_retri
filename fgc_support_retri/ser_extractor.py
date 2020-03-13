@@ -19,7 +19,7 @@ from .nn_model.sgroup_model import SGroupModel
 bert_model_name = config.BERT_EMBEDDING_ZH
 
 class Extractor:
-    def __init__(self, input_names, dataset_reader, indexer, collate_fn):
+    def __init__(self, input_names, dataset_reader):
         self.input_names = input_names
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #         device = torch.device("cpu")
@@ -28,8 +28,6 @@ class Extractor:
         bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
         self.tokenizer = bert_tokenizer
         self.dataset_reader = dataset_reader
-        self.indexer = indexer
-        self.collate_fn = collate_fn
     
     def predict(self, q, d):
         with torch.no_grad():
@@ -49,10 +47,14 @@ class Extractor:
                 for type_i in out_dct['atype']:
                     assert type_i == out_dct['atype'][0]
                 atype = type_i
+            else:
+                atype = None
             
             if 'sp_scores' in out_dct:
                 sp_scores = out_dct['sp_scores']
-
+            else:
+                sp_scores = []
+            
         return sp_preds, atype, sp_scores
 
     def predict_all_documents(self, documents):
@@ -65,12 +67,13 @@ class Extractor:
 
 class Sgroup_extractor(Extractor):
     def __init__(self):
-        input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'atype_ent_match']
+        input_names = ['input_ids', 'token_type_ids', 'attention_mask',
+                   'tf_type', 'idf_type', 'sf_score', 'atype_ent_match']
         dataset_reader = SerSGroupDataset
         super(Sgroup_extractor, self).__init__(input_names, dataset_reader)
     
         model = SGroupModel.from_pretrained(bert_model_name)
-        model_path = config.TRAINED_MODELS / '20200304_entity_match_lr=2e-5' / 'model_epoch17_eval_em:0.147_precision:0.628_recall:0.578_f1:0.555.m'
+        model_path = config.TRAINED_MODELS / '20200312_sgroup_sfscore_lr=2e-5' / 'model_epoch1_eval_em:0.151_precision:0.535_recall:0.682_f1:0.542.m'
         model.load_state_dict(torch.load(model_path, map_location=self.device))
         model.to(self.device)
         model.eval()

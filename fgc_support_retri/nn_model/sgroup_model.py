@@ -61,7 +61,7 @@ class BertEmbeddingsPlus(nn.Module):
 				+ ae_match_embeddings
 		)
 		
-		embeddings = torch.mul(embeddings, sf_score)
+		embeddings = torch.mul(embeddings, sf_score.unsqueeze(-1))
 		
 		embeddings = self.LayerNorm(embeddings)
 		embeddings = self.dropout(embeddings)

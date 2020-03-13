@@ -210,7 +210,7 @@ class SGroupIdx:
                 if token_a in tset:
                     sfreq += 1
             sf_score = sfreq / context_sents_num
-            sf_score_a = 1 - sf_score + eps
+            sf_score_a.append(1 - sf_score + eps)
             for level, bound in enumerate(self.sf_level_list):
                 if bound[0] <= sf_score < bound[1]:
                     sf_type_a[i] = level

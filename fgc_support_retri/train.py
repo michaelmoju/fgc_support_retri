@@ -49,11 +49,13 @@ class SER_Trainer:
             atype_golds = []
             atype_preds = []
             
-            for d in dev_documents:
+            for d in tqdm(dev_documents):
                 for q in d['QUESTIONS']:
                     if len(d['SENTS']) == 1:
                         continue
-                    q_instances = [self.indexer(item) for item in self.dataset_reader.get_items_in_q(q, d)]
+                    if not q['SHINT']:
+                        continue
+                    q_instances = [self.indexer(item) for item in self.dataset_reader.get_items_in_q(q, d, is_training=True)]
                     batch = self.collate_fn(q_instances)
                     for key in self.input_names:
                         batch[key] = batch[key].to(self.device)
@@ -171,8 +173,10 @@ def train_sgroup_model(num_epochs, batch_size, model_file_name):
     
     collate_fn = SGroup_collate
     indexer = SGroupIdx(tokenizer, pretrained_bert)
+#     input_names = ['input_ids', 'token_type_ids', 'attention_mask',
+#                    'tf_type', 'idf_type', 'atype_ent_match', 'label']
     input_names = ['input_ids', 'token_type_ids', 'attention_mask',
-                   'tf_type', 'idf_type', 'atype_ent_match', 'label']
+                   'tf_type', 'idf_type', 'sf_score', 'atype_ent_match', 'label']
     trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names)
     trainer.train(num_epochs, batch_size, model_file_name)
     
