@@ -29,7 +29,7 @@ bert_model_name = config.BERT_EMBEDDING_ZH
 class SER_Trainer:
     def __init__(self, model, collate_fn, indexer, dataset_reader, input_names):
         self.warmup_proportion = 0.1
-        self.lr = 2e-5
+        self.lr = 5e-5
         self.eval_frequency = 1
         self.collate_fn = collate_fn
         self.indexer = indexer
@@ -40,39 +40,29 @@ class SER_Trainer:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.device = device
         
-    def eval(self, dev_documents, epoch_i, trained_model_path):
+    def eval(self, dev_batches, epoch_i, trained_model_path, sp_golds, atype_golds):
         self.model.eval()
     
         with torch.no_grad():
-            sp_golds = []
             sp_preds = []
-            atype_golds = []
             atype_preds = []
-            
-            for d in tqdm(dev_documents):
-                for q in d['QUESTIONS']:
-                    if len(d['SENTS']) == 1:
-                        continue
-                    if not q['SHINT']:
-                        continue
-                    q_instances = [self.indexer(item) for item in self.dataset_reader.get_items_in_q(q, d, is_training=True)]
-                    batch = self.collate_fn(q_instances)
-                    for key in self.input_names:
-                        batch[key] = batch[key].to(self.device)
+            for batch in tqdm(dev_batches):   
+                batch = self.collate_fn(q_instances)
+                for key in self.input_names:
+                    batch[key] = batch[key].to(self.device)
                 
-                    out_dct = self.model.module.predict_fgc(batch)
+                out_dct = self.model.module.predict_fgc(batch)
                     
-                    if 'sp' in q:
-                        sp_preds.append(list(set(q['sp']) | set(out_dct['sp'])))
-                    else:
-                        sp_preds.append(out_dct['sp'])
-                    sp_golds.append(q['SHINT'])
+                if 'sp' in out_dct:
+                    sp_preds.append(list(set(q['sp']) | set(out_dct['sp'])))
+                else:
+                    sp_preds.append(out_dct['sp'])
                     
-                    if 'atype' in out_dct:
-                        for type_i in out_dct['atype']:
-                            assert type_i == out_dct['atype'][0]
-                        atype_preds.append(type_i)
-                        atype_golds.append(q['ATYPE'])
+                if 'atype' in out_dct:
+                    for type_i in out_dct['atype']:
+                        assert type_i == out_dct['atype'][0]
+                    atype_preds.append(type_i)
+                    atype_golds.append(q['ATYPE'])
 
         if atype_preds:
             metrics = eval_sp_fgc(sp_golds, sp_preds)
@@ -99,7 +89,7 @@ class SER_Trainer:
                            format(epoch_i, metrics['sp_em'], metrics['sp_prec'], metrics['sp_recall'],
                                   metrics['sp_f1'])))
                     
-    def train(self, num_epochs, batch_size, model_file_name):
+    def train(self, num_epochs, batch_size, model_file_name, train_documents=None):
         
         trained_model_path = config.TRAINED_MODELS / model_file_name
         if not os.path.exists(trained_model_path):
@@ -120,10 +110,27 @@ class SER_Trainer:
         ]
         
         # read data
-        train_documents = json_load(config.FGC_TRAIN)
+        if train_documents == None:
+            train_documents = json_load(config.FGC_TRAIN)
+            
         dev_documents = json_load(config.FGC_DEV)
+        dev_batches = []
+        sp_golds = []
+        atype_golds = []
+        for d in tqdm(dev_documents):
+            for q in d['QUESTIONS']:
+                if len(d['SENTS']) == 1:
+                    continue
+                if not q['SHINT']:
+                    continue
+                    
+                q_instances = [self.indexer(item) for item in self.dataset_reader.get_items_in_q(q, d, is_training=True)]
+                batch = self.collate_fn(q_instances)
+                dev_batches.append(batch)
         
-        train_set = self.dataset_reader(train_documents, transform=torchvision.transforms.Compose([self.indexer]))
+        print('train_set indexing')
+#         train_set = self.dataset_reader(train_documents, transform=torchvision.transforms.Compose([self.indexer]))
+        train_set = self.dataset_reader(train_documents, indexer=self.indexer)
         dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=self.collate_fn)
         
         # optimizer
@@ -159,7 +166,7 @@ class SER_Trainer:
             print('epoch %d train_loss: %.3f' % (epoch_i, running_loss / len(dataloader_train)))
     
             if epoch_i % self.eval_frequency == 0:
-                self.eval(dev_documents, epoch_i, trained_model_path)
+                self.eval(dev_batches, epoch_i, trained_model_path, sp_golds, atype_golds)
 
                 
 def train_sgroup_model(num_epochs, batch_size, model_file_name):
@@ -280,7 +287,7 @@ def train_BertSERModel(num_epochs, batch_size, model_file_name):
     bert_encoder = BertModel.from_pretrained(bert_model_name)
     model = BertSERModel(bert_encoder)
     
-    collate_fn = Sent_collate()
+    collate_fn = Sent_collate
     indexer = SentIdx(tokenizer, pretrained_bert)
     input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'label']
     trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names)

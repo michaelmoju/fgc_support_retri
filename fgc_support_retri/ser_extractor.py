@@ -177,23 +177,23 @@ class EMSER_extractor(Extractor):
         self.collate_fn = EM_collate
     
 
-class SER_sent_extract_V1(Extractor):
+class BertSER_extractor(Extractor):
     def __init__(self):
         input_names = ['input_ids', 'token_type_ids', 'attention_mask']
-        super(SER_context_extract_V1, self).__init__(input_names)
+        super(BertSER_extractor, self).__init__(input_names)
         
         bert_encoder = BertModel.from_pretrained(bert_model_name)
         model = BertSERModel(bert_encoder)
-#         model_path = config.TRAINED_MODELS / '20191129-with_hotpot'/ 'model_epoch5_loss_0.226.m'
-#         model_path = config.TRAINED_MODELS / '20191128'/ 'model_epoch5_loss_0.213.m' 
         model_path = config.TRAINED_MODELS / '20200102_sent_V1' / 'model_epoch10_eval_recall_0.025_f1_0.034.m'
         model.load_state_dict(torch.load(model_path, map_location=device))
         model.to(device)
         model.eval()
         self.model = model
-
-        self.indexer = BertSentV1Idx(self.tokenizer)
-        self.collate_fn = bert_sentV1_collate
+        
+        pretrained_bert = BertModel.from_pretrained(bert_model_name)
+        pretrained_bert.eval()
+        self.indexer = SentIdx(self.tokenizer, pretrained_bert)
+        self.collate_fn = Sent_collate
     
     
 class SER_context_extract_V1:

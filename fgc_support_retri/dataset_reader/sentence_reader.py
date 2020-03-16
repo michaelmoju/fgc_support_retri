@@ -3,6 +3,7 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 import torch.nn.functional as F
 from ..utils import normalize_etype
+from tqdm import tqdm
 
 ATYPE_LIST = ['Person', 'Date-Duration', 'Location', 'Organization',
               'Num-Measure', 'YesNo', 'Kinship', 'Event', 'Object', 'Misc']
@@ -24,7 +25,7 @@ atype2etype={'Person': ['PER'],
              'Num-Measure': ['NUMBER', 'ORDINAL', 'NUMBER', 'PERCENT'],
              'Date-Duration': ['DATE', 'TIME', 'DURATION']}
 
-DEBUG = 1
+DEBUG = 0
 
 class SerSentenceDataset(Dataset):
     "Supporting evidence dataset"
@@ -57,7 +58,7 @@ class SerSentenceDataset(Dataset):
         return out_ne, string_pieces
     
     @staticmethod
-    def get_items_in_q(q, d):
+    def get_items_in_q(q, d, is_training=False):
         for target_i, s in enumerate(d['SENTS']):
             q_ner_list = []
             for q_sent in q['SENTS']:
@@ -87,7 +88,7 @@ class SerSentenceDataset(Dataset):
                    'q_ne': q_ne, 'q_piece': q_string_pieces,
                    's_ne': s_ne, 's_piece': s_string_pieces}
         
-            if q['SHINT']:
+            if is_training:
                 if target_i in q['SHINT']:
                     out['label'] = 1
                 else:
@@ -95,11 +96,15 @@ class SerSentenceDataset(Dataset):
         
             yield out
 
-    def __init__(self, documents, transform=None):
+    def __init__(self, documents, transform=None, indexer=None):
         instances = []
-        for d in documents:
+        for d in tqdm(documents):
             for q in d['QUESTIONS']:
-                for instance in self.get_items_in_q(q, d):
+                if len(d['SENTS']) == 1:
+                    continue
+                for instance in self.get_items_in_q(q, d, is_training=True):
+                    if indexer:
+                        instance = indexer(instance)
                     instances.append(instance)
         self.instances = instances
         self.transform = transform
@@ -261,7 +266,8 @@ class SentIdx:
         sf_score_all = [1] + sf_score_q + [1] + sf_score_s
     
         if len(tokenized_all) > 511:
-            print("tokenized all > 511 id:{}".format(sample['QID']))
+            if DEBUG > 0:
+                print("tokenized all > 511 id:{}".format(sample['QID']))
             tokenized_all = tokenized_all[:511]
             tf_match = tf_match[:511]
             idf_match = idf_match[:511]
@@ -272,7 +278,8 @@ class SentIdx:
             sf_score_all = sf_score_all[:511]
     
         if len(tokenized_q) > 511:
-            print("tokenized question > 511 id:{}".format(sample['QID']))
+            if DEBUG > 0:
+                print("tokenized q > 511 id:{}".format(sample['QID']))
             tokenized_q = tokenized_q[:511]
             tokenized_q += ['[SEP]']
             etype_q = etype_q[:511]
