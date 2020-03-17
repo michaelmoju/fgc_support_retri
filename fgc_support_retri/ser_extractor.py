@@ -167,7 +167,7 @@ class EMSER_extractor(Extractor):
         super(EMSER_extractor, self).__init__(input_names, dataset_reader)
         
         model = EMSERModel.from_pretrained(bert_model_name)
-        model_path = config.TRAINED_MODELS / '20200316_Exact_lr=5e-5' / 'model_epoch5_eval_em:0.138_precision:0.588_recall:0.595_f1:0.537.m'
+        model_path = config.TRAINED_MODELS / '20200317_exact_lr=5e-5' / 'model_epoch10_eval_em:0.163_precision:0.625_recall:0.506_f1:0.513.m'
         model.load_state_dict(torch.load(model_path, map_location=self.device))
         model.to_mode('all')
         model.to(self.device)

@@ -101,13 +101,15 @@ class SerSGroupDataset(Dataset):
                     out['label'] = 0
             yield out
 
-    def __init__(self, documents, transform=None):
+    def __init__(self, documents, transform=None, indexer=None):
         instances = []
         for d in documents:
             for q in d['QUESTIONS']:
                 if len(d['SENTS']) == 1:
                     continue
                 for instance in self.get_items_in_q(q, d, is_training=True):
+                    if indexer:
+                        instance = indexer(instance)
                     instances.append(instance)
         self.instances = instances
         self.transform = transform
