@@ -202,8 +202,8 @@ class EMSERModel(BertPreTrainedModel):
         else:
             raise Exception("mode error: {}".format(self.mode))
         
-        dr_pooled_output = self.dropout(q_poolout)
-        logits = self.classifier(dr_pooled_output)
+#         q_poolout = self.dropout(q_poolout)
+        logits = self.classifier(q_poolout)
         logits = logits.squeeze(-1)
         return logits
     
@@ -234,32 +234,5 @@ class EMSERModel(BertPreTrainedModel):
             sp.append(max_i)
     
         return {'sp': sp, 'sp_scores': scores}
-    
-    def predict_hotpot(self, batch, threshold=0.5):
-        logits = self.forward_nn(batch)
-        scores = self._predict(logits)
-        
-        # scored_facts {doc_name: fact}
-        scored_facts = {}
-        
-        prediction = []
-        for i, score in enumerate(scores):
-            if score >= threshold:
-                fact = batch['element'][i]
-                if fact[0] not in scored_facts:
-                    scored_facts[fact[0]] = [(fact, score)]
-                else:
-                    scored_facts[fact[0]].append((fact, score))
-        
-        for doc, doc_scored_facts in scored_facts.items():
-            sorted_scored_facts = sorted(doc_scored_facts, key=lambda x: x[1], reverse=True)
-            doc_prediction = []
-            for f, s in sorted_scored_facts:
-                if s >= threshold:
-                    doc_prediction.append(f)
-            if not doc_prediction:
-                doc_prediction.append(sorted_scored_facts[0][0])
-            prediction += doc_prediction
-        
-        return prediction
+
 

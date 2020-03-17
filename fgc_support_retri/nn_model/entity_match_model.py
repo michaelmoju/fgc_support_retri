@@ -193,8 +193,8 @@ class EntityMatchModel(BertPreTrainedModel):
 		                         atype_ent_match=batch['atype_ent_match']
 		                         )
 		
-		dr_pooled_output = self.dropout(q_poolout)
-		logits = self.classifier(dr_pooled_output)
+# 		q_poolout = self.dropout(q_poolout)
+		logits = self.classifier(q_poolout)
 		logits = logits.squeeze(-1)
 		return logits
 	

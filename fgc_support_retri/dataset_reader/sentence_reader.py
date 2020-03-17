@@ -329,22 +329,22 @@ def Sent_collate(batch):
     atype_ent_match = pad_sequence([torch.tensor(sample['atype_ent_match']) for sample in batch], batch_first=True)
     sf_score = pad_sequence([torch.tensor(sample['sf_score']) for sample in batch], batch_first=True)
     
-    out = {'input_ids': input_ids_batch,
-           'question_ids': question_ids_batch,
-           'token_type_ids': token_type_ids_batch,
-           'attention_mask': attention_mask_batch,
-           'tf_type': tf_match,
-           'idf_type': idf_match,
-           'sf_type': sf_type,
-           'qsim_type': qsim_type,
-           'atype_ent_match': atype_ent_match,
-           'etype_ids': etype_ids,
-           'sf_score': sf_score}
+    out = {'input_ids': input_ids_batch.to("cpu"),
+           'question_ids': question_ids_batch.to("cpu"),
+           'token_type_ids': token_type_ids_batch.to("cpu"),
+           'attention_mask': attention_mask_batch.to("cpu"),
+           'tf_type': tf_match.to("cpu"),
+           'idf_type': idf_match.to("cpu"),
+           'sf_type': sf_type.to("cpu"),
+           'qsim_type': qsim_type.to("cpu"),
+           'atype_ent_match': atype_ent_match.to("cpu"),
+           'etype_ids': etype_ids.to("cpu"),
+           'sf_score': sf_score.to("cpu")}
     
     if 'label' in batch[0].keys():
-        out['label'] = torch.tensor([sample['label'] for sample in batch])
+        out['label'] = torch.tensor([sample['label'] for sample in batch]).to("cpu")
         
     if 'atype_label' in batch[0].keys():
-        out['atype_label'] = torch.tensor([sample['atype_label'] for sample in batch])
+        out['atype_label'] = torch.tensor([sample['atype_label'] for sample in batch]).to("cpu")
     
     return out

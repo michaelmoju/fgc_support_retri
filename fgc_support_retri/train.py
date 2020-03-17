@@ -1,5 +1,6 @@
 import os
 from tqdm import tqdm
+import copy
 import math
 import torchvision
 from torch.utils.data import DataLoader
@@ -46,24 +47,21 @@ class SER_Trainer:
         with torch.no_grad():
             sp_preds = []
             atype_preds = []
-            for batch in tqdm(dev_batches):   
-                batch = self.collate_fn(q_instances)
+            for batch in tqdm(dev_batches): 
+                batch = self.collate_fn(batch)
                 for key in self.input_names:
                     batch[key] = batch[key].to(self.device)
                 
                 out_dct = self.model.module.predict_fgc(batch)
-                    
-                if 'sp' in out_dct:
-                    sp_preds.append(list(set(q['sp']) | set(out_dct['sp'])))
-                else:
-                    sp_preds.append(out_dct['sp'])
+                sp_preds.append(out_dct['sp'])
                     
                 if 'atype' in out_dct:
                     for type_i in out_dct['atype']:
                         assert type_i == out_dct['atype'][0]
                     atype_preds.append(type_i)
-                    atype_golds.append(q['ATYPE'])
-
+        
+        max_sp_f1 = 0
+        
         if atype_preds:
             metrics = eval_sp_fgc(sp_golds, sp_preds)
             atype_accuracy = eval_fgc_atype(atype_golds, atype_preds)
@@ -82,7 +80,7 @@ class SER_Trainer:
                 epoch_i, metrics['sp_recall'], metrics['sp_f1']))
     
             model_to_save = self.model.module if hasattr(self.model, 'module') else self.model
-    
+            
             torch.save(model_to_save.state_dict(),
                        str(
                            trained_model_path / "model_epoch{0}_eval_em:{1:.3f}_precision:{2:.3f}_recall:{3:.3f}_f1:{4:.3f}.m".
@@ -117,6 +115,8 @@ class SER_Trainer:
         dev_batches = []
         sp_golds = []
         atype_golds = []
+        
+        print('dev_set indexing...')
         for d in tqdm(dev_documents):
             for q in d['QUESTIONS']:
                 if len(d['SENTS']) == 1:
@@ -125,10 +125,11 @@ class SER_Trainer:
                     continue
                     
                 q_instances = [self.indexer(item) for item in self.dataset_reader.get_items_in_q(q, d, is_training=True)]
-                batch = self.collate_fn(q_instances)
-                dev_batches.append(batch)
+                dev_batches.append(q_instances)
+                sp_golds.append(q['SHINT'])
+                atype_golds.append(q['ATYPE'])
         
-        print('train_set indexing')
+        print('train_set indexing...')
 #         train_set = self.dataset_reader(train_documents, transform=torchvision.transforms.Compose([self.indexer]))
         train_set = self.dataset_reader(train_documents, indexer=self.indexer)
         dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=self.collate_fn)
@@ -187,7 +188,7 @@ def train_sgroup_model(num_epochs, batch_size, model_file_name):
     
 
 def train_entity_match_model(num_epochs, batch_size, model_file_name):
-    dataset_reader = CrossSentDataset
+    dataset_reader = SerSentenceDataset
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
     pretrained_bert = BertModel.from_pretrained(bert_model_name)
