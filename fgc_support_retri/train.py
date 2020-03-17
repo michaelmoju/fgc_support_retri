@@ -21,7 +21,6 @@ from .nn_model.multitask_model import MultiSERModel
 from .nn_model.entity_model import EntitySERModel
 from .nn_model.entity_match_model import EntityMatchModel
 from .nn_model.sgroup_model import SGroupModel
-from .eval_old import evalaluate_f1
 from .evaluation.eval import eval_sp_fgc, eval_fgc_atype
 
 bert_model_name = config.BERT_EMBEDDING_ZH
@@ -145,7 +144,7 @@ class SER_Trainer:
         
         print('start training ... ')
         
-        for epoch_i in range(num_epochs + 1):
+        for epoch_i in range(num_epochs):
             self.model.train()
             running_loss = 0.0
             for batch_i, batch in enumerate(tqdm(dataloader_train)):
