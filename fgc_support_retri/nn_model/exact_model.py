@@ -202,7 +202,6 @@ class EMSERModel(BertPreTrainedModel):
         else:
             raise Exception("mode error: {}".format(self.mode))
         
-#         q_poolout = self.dropout(q_poolout)
         logits = self.classifier(q_poolout)
         logits = logits.squeeze(-1)
         return logits

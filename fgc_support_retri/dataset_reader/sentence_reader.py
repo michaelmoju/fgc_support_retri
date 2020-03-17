@@ -58,7 +58,7 @@ class SerSentenceDataset(Dataset):
         return out_ne, string_pieces
     
     @staticmethod
-    def get_items_in_q(q, d, is_training=False):
+    def get_items_in_q(q, d, is_training=False, is_hinge=False):
         for target_i, s in enumerate(d['SENTS']):
             q_ner_list = []
             for q_sent in q['SENTS']:
@@ -92,17 +92,20 @@ class SerSentenceDataset(Dataset):
                 if target_i in q['SHINT']:
                     out['label'] = 1
                 else:
-                    out['label'] = 0
+                    if is_hinge:
+                        out['label'] = -1
+                    else:
+                        out['label'] = 0
         
             yield out
 
-    def __init__(self, documents, transform=None, indexer=None):
+    def __init__(self, documents, transform=None, indexer=None, is_hinge=False):
         instances = []
         for d in tqdm(documents):
             for q in d['QUESTIONS']:
                 if len(d['SENTS']) == 1:
                     continue
-                for instance in self.get_items_in_q(q, d, is_training=True):
+                for instance in self.get_items_in_q(q, d, is_training=True, is_hinge=is_hinge):
                     if indexer:
                         instance = indexer(instance)
                     instances.append(instance)

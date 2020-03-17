@@ -8,8 +8,8 @@ from .dataset_reader.context_reader import *
 from .dataset_reader.cross_sent_reader import *
 from .dataset_reader.sentence_group_reader import * 
 from .nn_model.context_model import *
-from .nn_model.sentence_model import *
-from .nn_model.em_model import EMSERModel
+from .nn_model.bert_model import *
+from .nn_model.exact_model import EMSERModel
 from .nn_model.multitask_model import MultiSERModel
 from .nn_model.syn_model import SynSERModel
 from .nn_model.entity_model import EntitySERModel
