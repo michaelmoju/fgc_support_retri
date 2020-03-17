@@ -27,9 +27,9 @@ bert_model_name = config.BERT_EMBEDDING_ZH
 
 
 class SER_Trainer:
-    def __init__(self, model, collate_fn, indexer, dataset_reader, input_names, is_hinge=False):
+    def __init__(self, model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=False):
         self.warmup_proportion = 0.1
-        self.lr = 2e-5
+        self.lr = lr
         self.eval_frequency = 1
         self.collate_fn = collate_fn
         self.indexer = indexer
@@ -170,7 +170,7 @@ class SER_Trainer:
                 self.eval(dev_batches, epoch_i, trained_model_path, sp_golds, atype_golds)
 
                 
-def train_sgroup_model(num_epochs, batch_size, model_file_name, lr=None):
+def train_sgroup_model(num_epochs, batch_size, model_file_name, lr, is_hinge=False):
     dataset_reader = SerSGroupDataset
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -178,18 +178,18 @@ def train_sgroup_model(num_epochs, batch_size, model_file_name, lr=None):
     pretrained_bert.eval()
     
     model = SGroupModel.from_pretrained(bert_model_name)
+    if is_hinge:
+        model.criterion = torch.nn.HingeEmbeddingLoss()
     
     collate_fn = SGroup_collate
     indexer = SGroupIdx(tokenizer, pretrained_bert)
     input_names = ['input_ids', 'token_type_ids', 'attention_mask',
                    'tf_type', 'idf_type', 'sf_score', 'atype_ent_match', 'label']
-    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names)
-    if lr:
-        trainer.lr = lr
+    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
     trainer.train(num_epochs, batch_size, model_file_name)
     
 
-def train_entity_match_model(num_epochs, batch_size, model_file_name, is_hinge=False):
+def train_entity_match_model(num_epochs, batch_size, model_file_name, lr, is_hinge=False):
     dataset_reader = SerSentenceDataset
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -204,11 +204,11 @@ def train_entity_match_model(num_epochs, batch_size, model_file_name, is_hinge=F
     indexer = SentIdx(tokenizer, pretrained_bert)
     input_names = ['input_ids', 'token_type_ids', 'attention_mask',
                    'tf_type', 'idf_type', 'sf_score', 'atype_ent_match', 'label']
-    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, is_hinge=is_hinge)
+    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
     trainer.train(num_epochs, batch_size, model_file_name)
 
 
-def train_entity_model(num_epochs, batch_size, model_file_name, is_hinge=False):
+def train_entity_model(num_epochs, batch_size, model_file_name, lr, is_hinge=False):
     dataset_reader = SerSentenceDataset
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -224,11 +224,11 @@ def train_entity_model(num_epochs, batch_size, model_file_name, is_hinge=False):
     indexer = SentIdx(tokenizer, pretrained_bert)
     input_names = ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 
                    'tf_type', 'idf_type', 'sf_type', 'sf_score', 'qsim_type', 'atype_label', 'etype_ids', 'label']
-    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, is_hinge=is_hinge)
+    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
     trainer.train(num_epochs, batch_size, model_file_name)
 
 
-def train_MultiSERModel(num_epochs, batch_size, model_file_name):
+def train_MultiSERModel(num_epochs, batch_size, model_file_name, lr, is_hinge=False):
     dataset_reader = SerSentenceDataset
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -237,6 +237,8 @@ def train_MultiSERModel(num_epochs, batch_size, model_file_name):
     
     model = MultiSERModel.from_pretrained(bert_model_name)
     model.to_mode('all')
+    if is_hinge:
+        model.criterion = torch.nn.HingeEmbeddingLoss()
     
     pretrained_bert = BertModel.from_pretrained(bert_model_name)
     pretrained_bert.eval()
@@ -245,11 +247,11 @@ def train_MultiSERModel(num_epochs, batch_size, model_file_name):
     indexer = SynIdx(tokenizer, pretrained_bert)
     input_names = ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type',
                         'qsim_type', 'atype_label', 'label']
-    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names)
+    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
     trainer.train(num_epochs, batch_size, model_file_name)
     
 
-def train_SynSERModel(num_epochs, batch_size, model_file_name):
+def train_SynSERModel(num_epochs, batch_size, model_file_name, lr, is_hinge=False):
     dataset_reader = SerSentenceDataset
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -258,15 +260,17 @@ def train_SynSERModel(num_epochs, batch_size, model_file_name):
     
     model = SynSERModel.from_pretrained(bert_model_name)
     model.to_mode('all')
+    if is_hinge:
+        model.criterion = torch.nn.HingeEmbeddingLoss()
     
     collate_fn = Sent_collate
     indexer = SentIdx(tokenizer, pretrained_bert)
     input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type', 'qsim_type', 'label']
-    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names)
+    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
     trainer.train(num_epochs, batch_size, model_file_name)
 
 
-def train_EMSERModel(num_epochs, batch_size, model_file_name, is_hinge=False):
+def train_EMSERModel(num_epochs, batch_size, model_file_name, lr, is_hinge=False):
     dataset_reader = SerSentenceDataset
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -282,11 +286,11 @@ def train_EMSERModel(num_epochs, batch_size, model_file_name, is_hinge=False):
     indexer = SentIdx(tokenizer, pretrained_bert)
     input_names = ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type',
                         'qsim_type', 'label']
-    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, is_hinge=is_hinge)
+    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
     trainer.train(num_epochs, batch_size, model_file_name)
     
     
-def train_BertSERModel(num_epochs, batch_size, model_file_name, is_hinge=False):
+def train_BertSERModel(num_epochs, batch_size, model_file_name, lr, is_hinge=False):
     dataset_reader = SerSentenceDataset
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -301,5 +305,5 @@ def train_BertSERModel(num_epochs, batch_size, model_file_name, is_hinge=False):
     collate_fn = Sent_collate
     indexer = SentIdx(tokenizer, pretrained_bert)
     input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'label']
-    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, is_hinge=is_hinge)
+    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
     trainer.train(num_epochs, batch_size, model_file_name)
