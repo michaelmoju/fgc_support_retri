@@ -194,8 +194,6 @@ class SGroupModel(BertPreTrainedModel):
 		                         atype_ent_match=batch['atype_ent_match'],
 		                         sf_score=batch['sf_score']
 		                         )
-		
-		# q_poolout = self.dropout(q_poolout)
 		logits = self.classifier(q_poolout)
 		logits = logits.squeeze(-1)
 		return logits

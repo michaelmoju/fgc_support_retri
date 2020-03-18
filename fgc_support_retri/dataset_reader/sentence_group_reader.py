@@ -175,6 +175,8 @@ class SGroupIdx:
         out_tokenized = []
         out_etype = []
         for idx, p in enumerate(piece):
+            if piece == '\n':
+                continue
             tokenized_p = self.tokenizer.tokenize(p)
             out_tokenized += tokenized_p
         
