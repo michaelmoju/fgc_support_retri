@@ -192,7 +192,7 @@ def train_sgroup_model(num_epochs, batch_size, model_file_name, lr, is_hinge=Fal
     trainer.train(num_epochs, batch_size, model_file_name, is_score=is_score)
     
 
-def train_entity_match_model(num_epochs, batch_size, model_file_name, lr, is_hinge=False):
+def train_entity_match_model(num_epochs, batch_size, model_file_name, lr, is_hinge=False, is_score=False):
     dataset_reader = SerSentenceDataset
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -208,7 +208,7 @@ def train_entity_match_model(num_epochs, batch_size, model_file_name, lr, is_hin
     input_names = ['input_ids', 'token_type_ids', 'attention_mask',
                    'tf_type', 'idf_type', 'sf_score', 'atype_ent_match', 'label']
     trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
-    trainer.train(num_epochs, batch_size, model_file_name)
+    trainer.train(num_epochs, batch_size, model_file_name, is_score=is_score)
 
 
 def train_entity_model(num_epochs, batch_size, model_file_name, lr, is_hinge=False, is_score=False):

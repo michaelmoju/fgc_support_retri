@@ -202,34 +202,26 @@ class EntityMatchModel(BertPreTrainedModel):
 		logits = self.forward_nn(batch)
 		loss = self.criterion(logits, batch['label'])
 		return loss
-	
-	def _predict(self, logits):
-		scores = torch.sigmoid(logits)
-		scores = scores.cpu().numpy().tolist()
-		return scores
-	
-	def predict_score(self, batch):
-		logits = self.forward_nn(batch)
-		scores = self._predict(logits)
-		return scores
-	
-	def predict_fgc(self, batch, threshold=0.5):
+
+	def _predict(self, batch):
 		logits = self.forward_nn(batch)
 		scores = torch.sigmoid(logits)
 		scores = scores.cpu().numpy().tolist()
-		
-		score_list = [(i, score) for i, score in enumerate(scores)]
-		
+		return scores
+
+	def predict_fgc(self, q_batch, threshold=0.5):
+		scores = self._predict(q_batch)
+
 		max_i = 0
 		max_score = 0
-		prediction = []
-		for i, score in score_list:
+		sp = []
+		for i, score in enumerate(scores):
 			if score > max_score:
 				max_i = i
 			if score >= threshold:
-				prediction.append(i)
-		
-		if not prediction:
-			prediction.append(max_i)
-		
-		return {'sp': prediction}
+				sp.append(i)
+
+		if not sp:
+			sp.append(max_i)
+
+		return {'sp': sp, 'sp_scores': scores}
