@@ -44,6 +44,7 @@ def eval_sp_fgc(golds, predictions):
     N = len(golds)
     for k in metrics.keys():
         metrics[k] /= N
+        metrics[k] = round(metrics[k], 3)
     print(metrics)
     return metrics
     

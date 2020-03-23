@@ -21,22 +21,22 @@ bert_model_name = config.BERT_EMBEDDING_ZH
 class Extractor:
     def __init__(self, input_names, dataset_reader):
         self.input_names = input_names
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-#         device = torch.device("cpu")
+#         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cpu")
         self.device = device
         
         bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
         self.tokenizer = bert_tokenizer
         self.dataset_reader = dataset_reader
     
-    def predict(self, q, d):
+    def predict(self, q, d, threshold=0.5):
         with torch.no_grad():
             sentence_instances = [self.indexer(item) for item in self.dataset_reader.get_items_in_q(q, d)]
             batch = self.collate_fn(sentence_instances)
             for key in self.input_names:
                 batch[key] = batch[key].to(self.device)
             
-            out_dct = self.model.predict_fgc(batch)
+            out_dct = self.model.predict_fgc(batch, threshold)
             
             if 'sp' in q:
                 sp_preds = list(set(q['sp']) | set(out_dct['sp']))
@@ -73,7 +73,7 @@ class Sgroup_extractor(Extractor):
         super(Sgroup_extractor, self).__init__(input_names, dataset_reader)
     
         model = SGroupModel.from_pretrained(bert_model_name)
-        model_path = config.TRAINED_MODELS / '20200312_sgroup_sfscore_lr=2e-5' / 'model_epoch1_eval_em:0.151_precision:0.535_recall:0.682_f1:0.542.m'
+        model_path = config.TRAINED_MODELS / '20200323_sgroupModel_is_score_lr=2e-5' / 'model_epoch3_eval_em:0.126_precision:0.511_recall:0.597_f1:0.492.m'
         model.load_state_dict(torch.load(model_path, map_location=self.device))
         model.to(self.device)
         model.eval()
@@ -106,10 +106,11 @@ class EntityMatch_extractor(Extractor):
 class Entity_extractor(Extractor):
     def __init__(self):
         input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'etype_ids']
-        super(Entity_extractor, self).__init__(input_names)
+        dataset_reader = SerSentenceDataset
+        super(Entity_extractor, self).__init__(input_names, dataset_reader)
 
         model = EntitySERModel.from_pretrained(bert_model_name)
-        model_path = config.TRAINED_MODELS / '20200302_entity' / 'model_epoch10_eval_recall_0.546_f1_0.531.m'
+        model_path = config.TRAINED_MODELS / '20200323_entity_lr=2e-5' / 'model_epoch2_eval_em:0.192_precision:0.642_recall:0.633_f1:0.586.m'
         model.load_state_dict(torch.load(model_path, map_location=self.device))
         model.to_mode('etype+all')
         model.to(self.device)
@@ -167,7 +168,7 @@ class EMSER_extractor(Extractor):
         super(EMSER_extractor, self).__init__(input_names, dataset_reader)
         
         model = EMSERModel.from_pretrained(bert_model_name)
-        model_path = config.TRAINED_MODELS / '20200317_exact_lr=5e-5' / 'model_epoch10_eval_em:0.163_precision:0.625_recall:0.506_f1:0.513.m'
+        model_path = config.TRAINED_MODELS / '20200321_EMSERModel_lr=3e-5' / 'model_epoch3_eval_em:0.130_precision:0.595_recall:0.606_f1:0.535.m'
         model.load_state_dict(torch.load(model_path, map_location=self.device))
         model.to_mode('all')
         model.to(self.device)
@@ -188,7 +189,7 @@ class BertSER_extractor(Extractor):
         
         bert_encoder = BertModel.from_pretrained(bert_model_name)
         model = BertSERModel(bert_encoder)
-        model_path = config.TRAINED_MODELS / '20200316_BertSerModel_lr=5e-5' / 'model_epoch9_eval_em:0.113_precision:0.550_recall:0.561_f1:0.492.m'
+        model_path = config.TRAINED_MODELS / '20200321_BertSERModel_lr=3e-5' / 'model_epoch4_eval_em:0.105_precision:0.514_recall:0.660_f1:0.522.m'
         model.load_state_dict(torch.load(model_path, map_location=self.device))
         model.to(self.device)
         model.eval()

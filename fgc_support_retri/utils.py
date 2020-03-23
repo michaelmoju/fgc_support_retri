@@ -1,4 +1,5 @@
 import json
+from tqdm import tqdm
 
 
 def normalize_etype(ori_etype):
@@ -115,3 +116,44 @@ def json_load(fp):
 def json_write(out, out_fp):
     with open(out_fp, 'w') as f:
         json.dump(out, f, indent=4, ensure_ascii=False)
+        
+        
+def get_answer_sp(documents, force=False):
+    for d in tqdm(documents):
+        for q in d['QUESTIONS']:
+            if not q['SHINT']:
+                continue
+                
+            answer_sp = set()
+            if q['ATYPE'] == 'YesNo':
+                answer_sp = set(q['SHINT'])
+            else:
+                for answer in q['ANSWER']:
+                    for atoken in answer['ATOKEN']:
+                        for sent_i, sent in enumerate(d['SENTS']):
+                            if sent['end'] > atoken['start'] >= sent['start']:
+                                if not sent['end'] >= atoken['end'] > sent['start']:
+                                    print(atoken)
+                                answer_sp.add(sent_i)
+            answer_sp = list(answer_sp)
+            answer_sp.sort()
+            if force:
+                if not answer_sp:
+                    answer_sp = q['SHINT']
+            q['answer_sp'] = answer_sp
+
+def get_SHINT(documents):
+    for d in tqdm(documents):
+        for q in d['QUESTIONS']:
+            if not q['SHINT']:
+                continue
+            shint = set()
+            for aspan in q['ASPAN']:
+                for sent_i, sent in enumerate(d['SENTS']):
+                    if sent['end'] > aspan['start'] >= sent['start']:
+                        if not sent['end'] >= aspan['end'] > sent['start']:
+                            print(aspan)
+                        shint.add(sent_i)
+            shint = list(shint)
+            shint.sort()
+            q['SHINT'] = shint

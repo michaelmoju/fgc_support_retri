@@ -3,6 +3,7 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Dataset
 import torch.nn.functional as F
 from ..utils import normalize_etype
+from tqdm import tqdm
 
 ATYPE_LIST = ['Person', 'Date-Duration', 'Location', 'Organization',
               'Num-Measure', 'YesNo', 'Kinship', 'Event', 'Object', 'Misc']
@@ -57,7 +58,7 @@ class SerSGroupDataset(Dataset):
         return out_ne, string_pieces
     
     @staticmethod
-    def get_items_in_q(q, d, is_training=False):
+    def get_items_in_q(q, d, is_training=False, is_hinge=False, is_score=False):
         for target_i, s in enumerate(d['SENTS']):
             q_ner_list = []
             for q_sent in q['SENTS']:
@@ -96,18 +97,28 @@ class SerSGroupDataset(Dataset):
             
             if is_training:
                 if target_i in q['SHINT']:
-                    out['label'] = 1
+                    if is_score:
+                        if target_i in q['answer_sp']:
+                            out['label'] = 0.5
+                        else:
+                            out['label'] = 1
+                    else: 
+                        out['label'] = 1
                 else:
-                    out['label'] = 0
+                    if is_hinge:
+                        out['label'] = -1
+                    else:
+                        out['label'] = 0
+        
             yield out
 
-    def __init__(self, documents, transform=None, indexer=None):
+    def __init__(self, documents, transform=None, indexer=None, is_hinge=False, is_score=False):
         instances = []
-        for d in documents:
+        for d in tqdm(documents):
             for q in d['QUESTIONS']:
                 if len(d['SENTS']) == 1:
                     continue
-                for instance in self.get_items_in_q(q, d, is_training=True):
+                for instance in self.get_items_in_q(q, d, is_training=True, is_hinge=is_hinge, is_score=is_score):
                     if indexer:
                         instance = indexer(instance)
                     instances.append(instance)
@@ -218,13 +229,13 @@ class SGroupIdx:
             for level, bound in enumerate(self.sf_level_list):
                 if bound[0] <= sf_score < bound[1]:
                     sf_type_a[i] = level
-
+        
             asim_score = max(F.cosine_similarity(a_emb, b_embeds, dim=-1))
-
+        
             for level, bound in enumerate(self.qsim_level_list):
                 if bound[0] <= asim_score < bound[1]:
                     qsim_a[i] = level
-                    
+        
             if self.is_matched_atype_etype(atype, id2ETYPE[etype_a[i]]):
                 atype_ent_match_a[i] = 1
         

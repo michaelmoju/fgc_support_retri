@@ -87,7 +87,7 @@ class SER_Trainer:
                            format(epoch_i, metrics['sp_em'], metrics['sp_prec'], metrics['sp_recall'],
                                   metrics['sp_f1'])))
                     
-    def train(self, num_epochs, batch_size, model_file_name, train_documents=None):
+    def train(self, num_epochs, batch_size, model_file_name, train_documents=None, is_score=False):
         
         trained_model_path = config.TRAINED_MODELS / model_file_name
         if not os.path.exists(trained_model_path):
@@ -125,13 +125,16 @@ class SER_Trainer:
                     continue
                     
                 q_instances = [self.indexer(item) for item in
-                               self.dataset_reader.get_items_in_q(q, d, is_training=True, is_hinge=self.is_hinge)]
+                               self.dataset_reader.get_items_in_q(q, d, is_training=True, is_hinge=self.is_hinge, 
+                                                                 is_score=is_score)]
                 dev_batches.append(q_instances)
                 sp_golds.append(q['SHINT'])
                 atype_golds.append(q['ATYPE'])
         
         print('train_set indexing...')
-        train_set = self.dataset_reader(train_documents, indexer=self.indexer)
+        train_set = self.dataset_reader(train_documents, indexer=self.indexer, is_hinge=self.is_hinge,
+                                       is_score=is_score)
+        print('loader...')
         dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=self.collate_fn)
         
         # optimizer
@@ -170,7 +173,7 @@ class SER_Trainer:
                 self.eval(dev_batches, epoch_i, trained_model_path, sp_golds, atype_golds)
 
                 
-def train_sgroup_model(num_epochs, batch_size, model_file_name, lr, is_hinge=False):
+def train_sgroup_model(num_epochs, batch_size, model_file_name, lr, is_hinge=False, is_score=False):
     dataset_reader = SerSGroupDataset
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -186,7 +189,7 @@ def train_sgroup_model(num_epochs, batch_size, model_file_name, lr, is_hinge=Fal
     input_names = ['input_ids', 'token_type_ids', 'attention_mask',
                    'tf_type', 'idf_type', 'sf_score', 'atype_ent_match', 'label']
     trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
-    trainer.train(num_epochs, batch_size, model_file_name)
+    trainer.train(num_epochs, batch_size, model_file_name, is_score=is_score)
     
 
 def train_entity_match_model(num_epochs, batch_size, model_file_name, lr, is_hinge=False):
@@ -208,7 +211,7 @@ def train_entity_match_model(num_epochs, batch_size, model_file_name, lr, is_hin
     trainer.train(num_epochs, batch_size, model_file_name)
 
 
-def train_entity_model(num_epochs, batch_size, model_file_name, lr, is_hinge=False):
+def train_entity_model(num_epochs, batch_size, model_file_name, lr, is_hinge=False, is_score=False):
     dataset_reader = SerSentenceDataset
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -225,7 +228,7 @@ def train_entity_model(num_epochs, batch_size, model_file_name, lr, is_hinge=Fal
     input_names = ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 
                    'tf_type', 'idf_type', 'sf_type', 'sf_score', 'qsim_type', 'atype_label', 'etype_ids', 'label']
     trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
-    trainer.train(num_epochs, batch_size, model_file_name)
+    trainer.train(num_epochs, batch_size, model_file_name, is_score=is_score)
 
 
 def train_MultiSERModel(num_epochs, batch_size, model_file_name, lr, is_hinge=False):
