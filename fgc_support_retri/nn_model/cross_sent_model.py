@@ -184,20 +184,14 @@ class CrossSentModel(BertPreTrainedModel):
 		loss = self.criterion(logits, batch['label'])
 		return loss
 	
-	def _predict(self, logits):
+	def _predict(self, batch):
+        logits = self.forward_nn(batch)
 		scores = torch.sigmoid(logits)
 		scores = scores.cpu().numpy().tolist()
 		return scores
 	
-	def predict_score(self, batch):
-		logits = self.forward_nn(batch)
-		scores = self._predict(logits)
-		return scores
-	
-	def predict_fgc(self, batch, threshold=0.5):
-		logits = self.forward_nn(batch)
-		scores = torch.sigmoid(logits)
-		scores = scores.cpu().numpy().tolist()
+	def predict_fgc(self, q_batch, threshold=0.5):
+		scores = self._predict(q_batch)
 		
 		max_i = 0
 		max_score = 0

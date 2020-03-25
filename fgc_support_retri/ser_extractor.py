@@ -110,6 +110,7 @@ class Entity_extractor(Extractor):
         super(Entity_extractor, self).__init__(input_names, dataset_reader)
 
         model = EntitySERModel.from_pretrained(bert_model_name)
+#         model_path = config.TRAINED_MODELS / '20200323_entity_is_score_lr=2e-5' / 'model_epoch5_eval_em:0.146_precision:0.565_recall:0.554_f1:0.510.m'
         model_path = config.TRAINED_MODELS / '20200323_entity_lr=2e-5' / 'model_epoch2_eval_em:0.192_precision:0.642_recall:0.633_f1:0.586.m'
         model.load_state_dict(torch.load(model_path, map_location=self.device))
         model.to_mode('etype+all')
