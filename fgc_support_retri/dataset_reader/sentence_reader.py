@@ -15,7 +15,7 @@ ETYPE_LIST = ['O',
               'MONEY', 'NUMBER', 'ORDINAL', 'PERCENT',
               'DATE', 'TIME', 'DURATION', 'SET', 
               'EMAIL', 'URL', 'CITY', 'STATE_OR_PROVINCE', 'COUNTRY', 'RELIGION',
-              'TITLE', 'IDEOLOGY', 'CRIMINAL_CHARGE', 'CAUSE_OF_DEATH', 'DYNASTY']
+              'TITLE', 'IDEOLOGY', 'CRIMINAL_CHARGE', 'CAUSE_OF_DEATH']
 ETYPE2id = {v: k for k, v in enumerate(ETYPE_LIST)}
 id2ETYPE = {v: k for k, v in ETYPE2id.items()}
 
@@ -220,7 +220,7 @@ class SentIdx:
             for tset in context_tokenized_sents:
                 if token_a in tset:
                     sfreq += 1
-            sf_score = sfreq / context_sents_num
+            sf_score = sfreq / context_sents_num if context_sents_num > 0 else 0
             sf_score_a.append(1 - sf_score + eps)
             for level, bound in enumerate(self.sf_level_list):
                 if bound[0] <= sf_score < bound[1]:

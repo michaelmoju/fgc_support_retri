@@ -1,3 +1,4 @@
+import os
 import json
 from tqdm import tqdm
 
@@ -142,6 +143,7 @@ def get_answer_sp(documents, force=False):
                     answer_sp = q['SHINT']
             q['answer_sp'] = answer_sp
 
+            
 def get_SHINT(documents):
     for d in tqdm(documents):
         for q in d['QUESTIONS']:
@@ -157,3 +159,24 @@ def get_SHINT(documents):
             shint = list(shint)
             shint.sort()
             q['SHINT'] = shint
+
+            
+def max_atype(documents):
+    for d in documents:
+        for q in d['QUESTIONS']:
+            max_score = 0
+            for atype, score in q['ATYPE'].items():
+                if score > max_score:
+                    max_score = score
+                    max_type = atype
+            q['ATYPE'] = max_type
+            
+
+def get_model_path(dir_path): 
+    m_files = []
+    for file in os.listdir(dir_path):
+        if file.endswith('.m'):
+            m_files.append(file)
+    assert len(m_files) == 1
+    out_model_path = str(dir_path) + '/' + m_files[0]
+    return out_model_path

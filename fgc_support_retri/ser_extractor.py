@@ -15,14 +15,15 @@ from .nn_model.syn_model import SynSERModel
 from .nn_model.entity_model import EntitySERModel
 from .nn_model.entity_match_model import EntityMatchModel
 from .nn_model.sgroup_model import SGroupModel
+from .utils import get_model_path
 
 bert_model_name = config.BERT_EMBEDDING_ZH
 
 class Extractor:
     def __init__(self, input_names, dataset_reader):
         self.input_names = input_names
-#         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        device = torch.device("cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#         device = torch.device("cpu")
         self.device = device
         
         bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -66,14 +67,14 @@ class Extractor:
     
 
 class Sgroup_extractor(Extractor):
-    def __init__(self):
+    def __init__(self, model_folder):
         input_names = ['input_ids', 'token_type_ids', 'attention_mask',
                    'tf_type', 'idf_type', 'sf_score', 'atype_ent_match']
         dataset_reader = SerSGroupDataset
         super(Sgroup_extractor, self).__init__(input_names, dataset_reader)
     
         model = SGroupModel.from_pretrained(bert_model_name)
-        model_path = config.TRAINED_MODELS / '20200323_sgroupModel_is_score_lr=2e-5' / 'model_epoch3_eval_em:0.126_precision:0.511_recall:0.597_f1:0.492.m'
+        model_path = get_model_path(model_folder)
         model.load_state_dict(torch.load(model_path, map_location=self.device))
         model.to(self.device)
         model.eval()
@@ -86,13 +87,13 @@ class Sgroup_extractor(Extractor):
 
 
 class EntityMatch_extractor(Extractor):
-    def __init__(self):
+    def __init__(self, model_folder):
         input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'atype_ent_match']
         dataset_reader = SerSentenceDataset
         super(EntityMatch_extractor, self).__init__(input_names, dataset_reader)
     
         model = EntityMatchModel.from_pretrained(bert_model_name)
-        model_path = config.TRAINED_MODELS / '20200316_entity_match_lr=5e-5' / 'model_epoch6_eval_em:0.121_precision:0.567_recall:0.591_f1:0.514.m'
+        model_path = get_model_path(model_folder)
         model.load_state_dict(torch.load(model_path, map_location=self.device))
         model.to(self.device)
         model.eval()
@@ -104,14 +105,13 @@ class EntityMatch_extractor(Extractor):
         self.collate_fn = Sent_collate
 
 class Entity_extractor(Extractor):
-    def __init__(self):
+    def __init__(self, model_folder):
         input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'etype_ids']
         dataset_reader = SerSentenceDataset
         super(Entity_extractor, self).__init__(input_names, dataset_reader)
 
         model = EntitySERModel.from_pretrained(bert_model_name)
-#         model_path = config.TRAINED_MODELS / '20200323_entity_is_score_lr=2e-5' / 'model_epoch5_eval_em:0.146_precision:0.565_recall:0.554_f1:0.510.m'
-        model_path = config.TRAINED_MODELS / '20200323_entity_lr=2e-5' / 'model_epoch2_eval_em:0.192_precision:0.642_recall:0.633_f1:0.586.m'
+        model_path = get_model_path(model_folder)
         model.load_state_dict(torch.load(model_path, map_location=self.device))
         model.to_mode('etype+all')
         model.to(self.device)
@@ -125,12 +125,12 @@ class Entity_extractor(Extractor):
 
 
 class Syn_extractor(Extractor):
-    def __init__(self, model_mode):
+    def __init__(self, model_folder, model_mode):
         input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type', 'qsim_type']
         super(Syn_extractor, self).__init__(input_names)
 
         model = SynSERModel.from_pretrained(bert_model_name)
-        model_path = config.TRAINED_MODELS / '20200214_syn_all' / 'model_epoch6_eval_recall_0.537_f1_0.503.m'
+        model_path = get_model_path(model_folder)
         model.load_state_dict(torch.load(model_path, map_location=self.device))
         model.to_mode(model_mode)
         model.to(self.device)
@@ -144,12 +144,12 @@ class Syn_extractor(Extractor):
         
 
 class MultiTask_extractor(Extractor):
-    def __init__(self, model_mode):
+    def __init__(self, model_folder, model_mode):
         input_names = ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type', 'qsim_type']
         super(MultiTask_extractor, self).__init__(input_names)
         
         model = MultiSERModel.from_pretrained(bert_model_name)
-        model_path = config.TRAINED_MODELS / '20200215_multi_all' / 'model_epoch7_eval_f1_0.506_atype_0.920.m'
+        model_path = get_model_path(model_folder)
         model.load_state_dict(torch.load(model_path, map_location=self.device))
         model.to_mode(model_mode)
         model.to(self.device)
@@ -163,13 +163,13 @@ class MultiTask_extractor(Extractor):
 
 
 class EMSER_extractor(Extractor):
-    def __init__(self):
+    def __init__(self, model_folder):
         input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type']
         dataset_reader = SerSentenceDataset
         super(EMSER_extractor, self).__init__(input_names, dataset_reader)
         
         model = EMSERModel.from_pretrained(bert_model_name)
-        model_path = config.TRAINED_MODELS / '20200321_EMSERModel_lr=3e-5' / 'model_epoch3_eval_em:0.130_precision:0.595_recall:0.606_f1:0.535.m'
+        model_path = get_model_path(model_folder)
         model.load_state_dict(torch.load(model_path, map_location=self.device))
         model.to_mode('all')
         model.to(self.device)
@@ -183,14 +183,14 @@ class EMSER_extractor(Extractor):
     
 
 class BertSER_extractor(Extractor):
-    def __init__(self):
+    def __init__(self, model_folder):
         input_names = ['input_ids', 'token_type_ids', 'attention_mask']
         dataset_reader = SerSentenceDataset
         super(BertSER_extractor, self).__init__(input_names, dataset_reader)
         
         bert_encoder = BertModel.from_pretrained(bert_model_name)
         model = BertSERModel(bert_encoder)
-        model_path = config.TRAINED_MODELS / '20200321_BertSERModel_lr=3e-5' / 'model_epoch4_eval_em:0.105_precision:0.514_recall:0.660_f1:0.522.m'
+        model_path = get_model_path(model_folder)
         model.load_state_dict(torch.load(model_path, map_location=self.device))
         model.to(self.device)
         model.eval()
