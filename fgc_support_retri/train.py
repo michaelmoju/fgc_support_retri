@@ -225,8 +225,7 @@ def train_entity_model(num_epochs, batch_size, model_file_name, lr, is_hinge=Fal
     
     collate_fn = Sent_collate
     indexer = SentIdx(tokenizer, pretrained_bert)
-    input_names = ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 
-                   'tf_type', 'idf_type', 'sf_type', 'sf_score', 'qsim_type', 'atype_label', 'etype_ids', 'label']
+    input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'etype_ids']
     trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
     trainer.train(num_epochs, batch_size, model_file_name, is_score=is_score)
 

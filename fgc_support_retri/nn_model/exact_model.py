@@ -226,6 +226,7 @@ class EMSERModel(BertPreTrainedModel):
         for i, score in enumerate(scores):
             if score > max_score:
                 max_i = i
+                max_score = score
             if score >= threshold:
                 sp.append(i)
     
