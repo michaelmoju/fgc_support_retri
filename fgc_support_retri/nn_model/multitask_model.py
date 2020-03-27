@@ -300,6 +300,7 @@ class MultiSERModel(BertPreTrainedModel):
 		for i, score in score_list:
 			if score > max_score:
 				max_i = i
+				max_score = score
 			if score >= threshold:
 				prediction.append(i)
 		

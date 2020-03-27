@@ -281,13 +281,10 @@ class SynSERModel(BertPreTrainedModel):
 		for i, score in score_list:
 			if score > max_score:
 				max_i = i
-                max_score = score
+				max_score = score
 			if score >= threshold:
 				prediction.append(i)
-		
-		#         if len(prediction)<3:
-		#             score_list.sort(key=lambda item: item[1], reverse=True)
-		#             prediction = [i for i,score in score_list[:1]]
+
 		if not prediction:
 			prediction.append(max_i)
 		
