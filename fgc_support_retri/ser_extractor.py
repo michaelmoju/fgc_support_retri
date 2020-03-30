@@ -29,6 +29,24 @@ class Extractor:
         bert_tokenizer = BertTokenizer.from_pretrained(bert_model_name)
         self.tokenizer = bert_tokenizer
         self.dataset_reader = dataset_reader
+        
+    def predict_fgc(self, q_batch, threshold=0.5):
+        scores = self.model._predict(q_batch)
+
+        max_i = 0
+        max_score = 0
+        sp = []
+        for i, score in enumerate(scores):
+            if score > max_score:
+                max_i = i
+                max_score = score
+            if score >= threshold:
+                sp.append(i)
+
+        if not sp:
+            sp.append(max_i)
+
+        return {'sp': sp, 'sp_scores': scores}
     
     def predict(self, q, d, threshold=0.5):
         with torch.no_grad():
@@ -37,7 +55,7 @@ class Extractor:
             for key in self.input_names:
                 batch[key] = batch[key].to(self.device)
             
-            out_dct = self.model.predict_fgc(batch, threshold)
+            out_dct = self.predict_fgc(batch, threshold)
             
             if 'sp' in q:
                 sp_preds = list(set(q['sp']) | set(out_dct['sp']))
@@ -59,8 +77,11 @@ class Extractor:
         return sp_preds, atype, sp_scores
 
     def predict_all_documents(self, documents):
-        for d in documents:
+        for d in tqdm(documents):
             for q in d['QUESTIONS']:
+                if len(d['SENTS']) == 1:
+                    q['sp'] = [0]
+                    q['sp_scores'] = [1.0]
                 sp_preds, atype_preds, sp_scores = self.predict(q, d)
                 q['sp'] = sp_preds
                 q['sp_scores'] = sp_scores
@@ -201,4 +222,7 @@ class BertSER_extractor(Extractor):
         self.indexer = SentIdx(self.tokenizer, pretrained_bert)
         self.collate_fn = Sent_collate
     
-    
+       
+class Sp_extractor(Entity_extractor):
+    def __init__(self, model_folder):
+        super(Sp_extractor, self).__init__(model_folder)
