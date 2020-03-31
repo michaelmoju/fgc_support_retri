@@ -3,7 +3,7 @@ from transformers.modeling_bert import BertLayerNorm, BertEncoder, BertPooler, B
 import torch
 import torch.nn as nn
 import torch.nn.functional
-from fgc_support_retri.dataset_reader.sentence_reader import ETYPE_LIST
+from fgc_support_retri.dataset_reader.sentence_reader import ETYPE_LIST, sf_level
 
 
 class BertEmbeddingsPlus(nn.Module):
@@ -18,12 +18,13 @@ class BertEmbeddingsPlus(nn.Module):
         self.tf_embeddings = nn.Embedding(2, config.hidden_size)
         self.idf_embeddings = nn.Embedding(2, config.hidden_size)
         self.etype_embeddings = nn.Embedding(len(ETYPE_LIST), config.hidden_size)
+        self.sf_embeddings = nn.Embedding(sf_level, config.hidden_size)
 
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, input_ids, token_type_ids=None, position_ids=None, inputs_embeds=None, tf_type=None,
-                idf_type=None, etype_ids=None):
+                idf_type=None, etype_ids=None, sf_type=None):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -43,6 +44,8 @@ class BertEmbeddingsPlus(nn.Module):
             tf_type = torch.zeros(input_shape, dtype=torch.long, device=device)
         if idf_type is None:
             idf_type = torch.zeros(input_shape, dtype=torch.long, device=device)
+        if sf_type is None:
+            sf_type = torch.zeros(input_shape, dtype=torch.long, device=device)
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
@@ -51,15 +54,16 @@ class BertEmbeddingsPlus(nn.Module):
         token_type_embeddings = self.token_type_embeddings((token_type_ids > 0).long())
         tf_embeddings = self.tf_embeddings((tf_type > 0).long())
         idf_embeddings = self.idf_embeddings((idf_type > 0).long())
+        sf_embeddings = self.sf_embeddings(sf_type)
 
         embeddings = (
                 inputs_embeds
                 + position_embeddings
                 + token_type_embeddings
-                + idf_embeddings
                 + etype_embeddings
+                + sf_embeddings
         )
-
+        
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -74,7 +78,7 @@ class BertModelPlus(BertModel):
         self.init_weights()
 
     def forward(self, input_ids=None, tf_type=None, idf_type=None, token_type_ids=None, attention_mask=None,
-                position_ids=None, etype_ids=None,
+                position_ids=None, etype_ids=None, sf_type=None,
                 head_mask=None, inputs_embeds=None, encoder_hidden_states=None, encoder_attention_mask=None):
 
         if input_ids is not None and inputs_embeds is not None:
@@ -160,7 +164,7 @@ class BertModelPlus(BertModel):
 
         embedding_output = self.embeddings(input_ids=input_ids, tf_type=tf_type, idf_type=idf_type,
                                            position_ids=position_ids, token_type_ids=token_type_ids,
-                                           inputs_embeds=inputs_embeds, etype_ids=etype_ids)
+                                           inputs_embeds=inputs_embeds, etype_ids=etype_ids, sf_type=sf_type)
         encoder_outputs = self.encoder(embedding_output,
                                        attention_mask=extended_attention_mask,
                                        head_mask=head_mask,
@@ -186,7 +190,14 @@ class EntitySERModel(BertPreTrainedModel):
         self.mode = mode
 
     def forward_nn(self, batch):
-        if self.mode == 'etype+all':
+        if self.mode == 'etype+sf':
+            _, q_poolout = self.bert(batch['input_ids'], batch['tf_type'], batch['idf_type'],
+                                     token_type_ids=batch['token_type_ids'],
+                                     attention_mask=batch['attention_mask'],
+                                     etype_ids=batch['etype_ids'],
+                                     sf_type=batch['sf_type']
+                                    )
+        elif self.mode == 'etype+all':
             _, q_poolout = self.bert(batch['input_ids'], batch['tf_type'], batch['idf_type'],
                                      token_type_ids=batch['token_type_ids'],
                                      attention_mask=batch['attention_mask'],

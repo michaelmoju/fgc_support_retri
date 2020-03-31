@@ -26,6 +26,7 @@ atype2etype={'Person': ['PER'],
              'Date-Duration': ['DATE', 'TIME', 'DURATION']}
 
 DEBUG = 0
+sf_level = 20
 
 class SerSentenceDataset(Dataset):
     "Supporting evidence dataset"
@@ -147,7 +148,7 @@ class SentIdx:
             ans_ent_match: answer type matches entity type
         """
     
-    def __init__(self, tokenizer, pretrained_bert, sf_level=20, qsim_level=20):
+    def __init__(self, tokenizer, pretrained_bert, sf_level=sf_level, qsim_level=20):
         self.tokenizer = tokenizer
         self.bert = pretrained_bert
         self.sf_level = sf_level
