@@ -85,6 +85,27 @@ class Extractor:
                 sp_preds, atype_preds, sp_scores = self.predict(q, d)
                 q['sp'] = sp_preds
                 q['sp_scores'] = sp_scores
+
+
+class EntitySF_extractor(Extractor):
+    def __init__(self, model_folder):
+        input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type',
+                       'etype_ids', 'sf_type']
+        dataset_reader = SerSentenceDataset
+        super(EntitySF_extractor, self).__init__(input_names, dataset_reader)
+
+        model = EntitySERModel.from_pretrained(bert_model_name)
+        model_path = get_model_path(model_folder)
+        model.load_state_dict(torch.load(model_path, map_location=self.device))
+        model.to_mode('etype+sf')
+        model.to(self.device)
+        model.eval()
+        self.model = model
+
+        pretrained_bert = BertModel.from_pretrained(bert_model_name)
+        pretrained_bert.eval()
+        self.indexer = SentIdx(self.tokenizer, pretrained_bert)
+        self.collate_fn = Sent_collate
     
 
 class Sgroup_extractor(Extractor):
@@ -124,6 +145,7 @@ class EntityMatch_extractor(Extractor):
         pretrained_bert.eval()
         self.indexer = SentIdx(self.tokenizer, pretrained_bert)
         self.collate_fn = Sent_collate
+
 
 class Entity_extractor(Extractor):
     def __init__(self, model_folder):

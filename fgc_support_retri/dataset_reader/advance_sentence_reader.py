@@ -26,68 +26,68 @@ atype2etype = {'Person': ['PER'],
                'Date-Duration': ['DATE', 'TIME', 'DURATION']}
 
 DEBUG = 0
+sf_level = 20
+qsim_level = 20
+
+
+def token_get_ne(token, ne_list):
+    for ne in ne_list:
+        if token['char_b'] == ne['char_b']:
+            assert token['char_e'] == ne['char_e']
+            assert ne['type'] in ETYPE_LIST
+            token['etype'] = ne['type']
+            return token
+    token['etype'] = 'O'
+    return token
+
+
+def is_matched_atype_etype(atype, etype):
+    if atype in atype2etype:
+        if etype in atype2etype[atype]:
+            return True
+    return False
 
 
 class SerSentenceDataset(Dataset):
     "Supporting evidence dataset"
 
     @staticmethod
-    def get_ne(ner_list, input_string):
-        out_ne = {}
-        string_b = 0
-        string_pieces = []
-        for ne in ner_list:
-            char_b = ne['char_b']
-            char_e = ne['char_e']
-            if (input_string[char_b] != ne['string'][0] and input_string[char_e - 1] != ne['string'][-1]):
-                #             if input_string[char_b:char_e] != ne['string']:
-                if DEBUG == 1:
-                    print("input_string:")
-                    print(input_string)
-                    print("input_string[char_b:char_e]:")
-                    print(input_string[char_b:char_e])
-                    print("ne:")
-                    print(ne)
-                continue
-            # assert input_string[char_b:char_e] == ne['string']
-            string_pieces.append(input_string[string_b:char_b])
-            string_pieces.append(input_string[char_b:char_e])
-            out_ne[len(string_pieces) - 1] = normalize_etype(ne['type'])  # out_ne = {ne_piece_idx : etype]
-            string_b = char_e
-        if string_b < len(input_string):
-            string_pieces.append(input_string[string_b:])
-        return out_ne, string_pieces
-
-    @staticmethod
     def get_items_in_q(q, d, is_training=False, is_hinge=False, is_score=False):
-        for target_i, s in enumerate(d['SENTS']):
-            q_ner_list = []
-            for q_sent in q['SENTS']:
-                for ne in q_sent['IE']['NER']:
-                    q_ner_list.append({'string': ne['string'],
-                                       'type': ne['type'],
-                                       'char_b': ne['char_b'] + q_sent['start'],
-                                       'char_e': ne['char_e'] + q_sent['start']})
-            q_ne, q_string_pieces = SerSentenceDataset.get_ne(q_ner_list, q['QTEXT_CN'])
 
-            s_ne, s_string_pieces = SerSentenceDataset.get_ne(s['IE']['NER'], s['text'])
+        # q
+        q_tokens = []
+        q_info_tokens = []
+        q_entities = []
+        for q_sent in q['SENTS']:
+            for token in q_sent['IE']['TOKEN']:
+                q_tokens.append(token['word'])
+                q_info_tokens.append(token_get_ne(token, q_sent['IE']['NER']))
+            q_entities += [(ne['string'], ne['type']) for ne in q_sent['IE']['NER']]
 
-            other_context = ""
-            context_sents = []
-            for context_i, context_s in enumerate(d['SENTS']):
-                if context_i != target_i:
-                    other_context += context_s['text']
-                    context_sents.append(context_s['text'])
+        if q['ATYPE']:
+            assert q['ATYPE'] in ATYPE_LIST
+            atype = q['ATYPE']
+        else:
+            atype = 'Misc'
 
-            if q['ATYPE']:
-                assert q['ATYPE'] in ATYPE_LIST
-                atype = q['ATYPE']
-            else:
-                atype = 'Misc'
-            out = {'QID': q['QID'], 'QTEXT': q['QTEXT_CN'], 'sentence': s['text'],
-                   'other_context': other_context, 'context_sents': context_sents, 'atype': atype,
-                   'q_ne': q_ne, 'q_piece': q_string_pieces,
-                   's_ne': s_ne, 's_piece': s_string_pieces}
+        # document
+        document_s = {'tokens': [], 'entities': []}
+        for sent_i, sent in enumerate(d['SENTS']):
+            tokens = []
+            info_tokens = []
+            for token in sent['IE']['TOKEN']:
+                tokens.append(token['word'])
+                info_tokens.append(token_get_ne(token, sent['IE']['NER']))
+            s_entities = [(ne['string'], ne['type']) for ne in sent['IE']['NER']]
+            document_s['tokens'].append(tokens)
+            document_s['info_tokens'].append(info_tokens)
+            document_s['entities'].append(s_entities)
+
+        # each target_s
+        for target_i in range(len(d['SENTS'])):
+            out = {'qid': q['QID'], 'target_i': target_i,
+                   'q': {'tokens': q_tokens, 'info_tokens': q_info_tokens, 'entities': q_entities},
+                   'd': document_s, 'atype': atype}
 
             if is_training:
                 if target_i in q['SHINT']:
@@ -103,7 +103,6 @@ class SerSentenceDataset(Dataset):
                         out['label'] = -1
                     else:
                         out['label'] = 0
-
             yield out
 
     def __init__(self, documents, transform=None, indexer=None, is_hinge=False, is_score=False):
@@ -135,6 +134,7 @@ class SerSentenceDataset(Dataset):
 class SentIdx:
     """ Sentence to BERT idx
             tokenizer: Bert tokenizer
+
             tf_match: 1 if the token match target q or s; 0 otherwise
             idf_match: 1 if the token match other context token; 0 otherwise
             qsim_type: 20 level QA pair similariy (0~19)
@@ -142,11 +142,12 @@ class SentIdx:
             sf_level_list: [(0, 0.05), (0.05, 0.1), ..., (0.95, 1)]. The lower bound and upper bound of each sf_level
             qsim_level: same as sf_level
             qsim_level_list: same as sf_level_list
+
             ent_type: entity type of tokens
             ans_ent_match: answer type matches entity type
         """
 
-    def __init__(self, tokenizer, pretrained_bert, sf_level=20, qsim_level=20):
+    def __init__(self, tokenizer, pretrained_bert):
         self.tokenizer = tokenizer
         self.bert = pretrained_bert
         self.sf_level = sf_level
@@ -193,11 +194,22 @@ class SentIdx:
         return out_tokenized, out_etype
 
     @staticmethod
-    def is_matched_atype_etype(atype, etype):
-        if atype in atype2etype:
-            if etype in atype2etype[atype]:
-                return True
-        return False
+    def sentence_freq(element, doc_elements):
+        eps = 1e-6
+        s_num = len(doc_elements)
+
+        freq = 0
+        for s_elements in doc_elements:
+            if element in s_elements:
+                freq += 1
+        return freq / s_num + eps
+
+    @staticmethod
+    def element_match(element, pair_elements, doc_elements):
+        match_label = 1 if element in pair_elements else 0
+        sf = SentIdx.sentence_freq(element, doc_elements)
+
+        return match_label, sf
 
     def compare_match(self, tokenized_a, a_embeds, etype_a, tokenized_b, b_embeds, tokenized_context,
                       context_tokenized_sents, context_sents_num, atype):
@@ -231,13 +243,37 @@ class SentIdx:
                 if bound[0] <= asim_score < bound[1]:
                     qsim_a[i] = level
 
-            if self.is_matched_atype_etype(atype, id2ETYPE[etype_a[i]]):
+            if is_matched_atype_etype(atype, id2ETYPE[etype_a[i]]):
                 atype_ent_match_a[i] = 1
 
         return tf_match_a, idf_match_a, sf_type_a, qsim_a, atype_ent_match_a, sf_score_a
 
     def __call__(self, sample):
+        target_i = sample['target_i']
+        d = sample['d']
 
+        q_match_entity = []
+        q_match_token = []
+        q_match_bert = []
+        for token_q in sample['q']['tokens']:
+            # entity level
+            entity = (token_q['word'], token_q['etype'])
+            pair_entities = d['entities'][target_i]
+            doc_entities = d['entities']
+            match_label, sf = self.element_match(entity, pair_entities, doc_entities)
+            q_match_entity.append(match_label)
+
+            # token level
+            token = token_q['word']
+            pair_tokens = d['tokens'][target_i]
+            doc_tokens = d['tokens']
+            match_label, sf = self.element_match(token, pair_tokens, doc_tokens)
+            q_match_token.append(match_label)
+
+            # bert_token level
+            bert_tokens = self.tokenizer.tokenize(token_q['word'])
+
+        ################
         tokenized_context = self.tokenizer.tokenize(sample['other_context'])
 
         tokenized_q, etype_q = self.get_tkn_and_etype(sample['q_piece'], sample['q_ne'])
