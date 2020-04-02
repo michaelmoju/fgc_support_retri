@@ -26,6 +26,8 @@ atype2etype = {'Person': ['PER'],
                'Date-Duration': ['DATE', 'TIME', 'DURATION']}
 
 DEBUG = 0
+sf_level = 20
+qsim_level = 20
 
 
 class SerSentenceDataset(Dataset):
