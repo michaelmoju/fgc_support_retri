@@ -134,6 +134,8 @@ def get_answer_sp(documents, force=False):
                         for sent_i, sent in enumerate(d['SENTS']):
                             if sent['end'] > atoken['start'] >= sent['start']:
                                 if not sent['end'] >= atoken['end'] > sent['start']:
+                                    print(q['QID'])
+                                    print(sent)
                                     print(atoken)
                                 answer_sp.add(sent_i)
             answer_sp = list(answer_sp)
@@ -154,6 +156,8 @@ def get_SHINT(documents):
                 for sent_i, sent in enumerate(d['SENTS']):
                     if sent['end'] > aspan['start'] >= sent['start']:
                         if not sent['end'] >= aspan['end'] > sent['start']:
+                            print(q['QID'])
+                            print(sent)
                             print(aspan)
                         shint.add(sent_i)
             shint = list(shint)

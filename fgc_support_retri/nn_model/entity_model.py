@@ -61,6 +61,7 @@ class BertEmbeddingsPlus(nn.Module):
                 + position_embeddings
                 + token_type_embeddings
                 + etype_embeddings
+#                 + idf_embeddings
                 + sf_embeddings
         )
         

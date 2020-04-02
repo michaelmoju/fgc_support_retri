@@ -23,7 +23,7 @@ atype2etype = {'Person': ['PER'],
                'Location': ['LOC', 'GPE', 'STATE_OR_PROVINCE', 'CITY', 'COUNTRY'],
                'Organization': ['ORG', 'COUNTRY'],
                'Num-Measure': ['NUMBER', 'ORDINAL', 'NUMBER', 'PERCENT'],
-               'Date-Duration': ['DATE', 'TIME', 'DURATION']}
+               'Date-Duration': ['DATE', 'TIME', 'DURATION', 'DYNASTY']}
 
 DEBUG = 0
 sf_level = 20
