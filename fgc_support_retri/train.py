@@ -172,25 +172,6 @@ class SER_Trainer:
             if epoch_i % self.eval_frequency == 0:
                 self.eval(dev_batches, epoch_i, trained_model_path, sp_golds, atype_golds)
 
-                
-def train_entity_sf_model(num_epochs, batch_size, model_file_name, lr, is_hinge=False, is_score=False):
-    dataset_reader = SerSentenceDataset
-    
-    tokenizer = BertTokenizer.from_pretrained(bert_model_name)
-    pretrained_bert = BertModel.from_pretrained(bert_model_name)
-    pretrained_bert.eval()
-    
-    model = EntitySERModel.from_pretrained(bert_model_name)
-    model.to_mode('etype+sf')
-    if is_hinge:
-        model.criterion = torch.nn.HingeEmbeddingLoss()
-    
-    collate_fn = Sent_collate
-    indexer = SentIdx(tokenizer, pretrained_bert)
-    input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'etype_ids', 'sf_type']
-    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
-    trainer.train(num_epochs, batch_size, model_file_name, is_score=is_score)
-    
     
 def train_sgroup_model(num_epochs, batch_size, model_file_name, lr, is_hinge=False, is_score=False):
     dataset_reader = SerSGroupDataset
@@ -206,7 +187,7 @@ def train_sgroup_model(num_epochs, batch_size, model_file_name, lr, is_hinge=Fal
     collate_fn = SGroup_collate
     indexer = SGroupIdx(tokenizer, pretrained_bert)
     input_names = ['input_ids', 'token_type_ids', 'attention_mask',
-                   'tf_type', 'idf_type', 'sf_score', 'atype_ent_match', 'label']
+                   'tf_type', 'idf_type', 'sf_score', 'atype_ent_match']
     trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
     trainer.train(num_epochs, batch_size, model_file_name, is_score=is_score)
     
