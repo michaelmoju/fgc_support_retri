@@ -19,6 +19,7 @@ from .utils import get_model_path
 
 bert_model_name = config.BERT_EMBEDDING_ZH
 
+
 class Extractor:
     def __init__(self, input_names, dataset_reader):
         self.input_names = input_names
