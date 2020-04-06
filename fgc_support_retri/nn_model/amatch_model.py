@@ -16,14 +16,14 @@ class BertEmbeddingsPlus(nn.Module):
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
         self.tf_embeddings = nn.Embedding(2, config.hidden_size)
         self.idf_embeddings = nn.Embedding(2, config.hidden_size)
-        self.ae_match_embeddings = nn.Embedding(2, config.hidden_size)
+        self.amatch_embeddings = nn.Embedding(2, config.hidden_size)
         self.sf_embeddings = nn.Embedding(sf_level, config.hidden_size)
 
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, input_ids, token_type_ids=None, position_ids=None, inputs_embeds=None, tf_type=None,
-                idf_type=None, atype_ent_match=None, sf_type=None, mode=None):
+                idf_type=None, amatch_type=None, sf_type=None, mode=None):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -36,8 +36,8 @@ class BertEmbeddingsPlus(nn.Module):
             position_ids = position_ids.unsqueeze(0).expand(input_shape)
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-        if atype_ent_match is None:
-            atype_ent_match = torch.zeros(input_shape, dtype=torch.long, device=device)
+        if amatch_type is None:
+            amatch_type = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         if tf_type is None:
             tf_type = torch.zeros(input_shape, dtype=torch.long, device=device)
@@ -49,7 +49,7 @@ class BertEmbeddingsPlus(nn.Module):
             inputs_embeds = self.word_embeddings(input_ids)
 
         position_embeddings = self.position_embeddings(position_ids)
-        ae_match_embeddings = self.ae_match_embeddings((atype_ent_match > 0).long())
+        amatch_embeddings = self.amatch_embeddings((amatch_type > 0).long())
         token_type_embeddings = self.token_type_embeddings((token_type_ids > 0).long())
         tf_embeddings = self.tf_embeddings((tf_type > 0).long())
         idf_embeddings = self.idf_embeddings((idf_type > 0).long())
@@ -62,25 +62,25 @@ class BertEmbeddingsPlus(nn.Module):
         )
 
         if mode == "none":
-            embeddings += ae_match_embeddings
+            embeddings += amatch_embeddings
 
         elif mode == "EM":
-            embeddings += ae_match_embeddings + tf_embeddings + idf_embeddings
+            embeddings += amatch_embeddings + tf_embeddings + idf_embeddings
 
         elif mode == "idf":
-            embeddings += ae_match_embeddings + idf_embeddings
+            embeddings += amatch_embeddings + idf_embeddings
 
         elif mode == "sf":
-            embeddings += ae_match_embeddings + sf_embeddings
+            embeddings += amatch_embeddings + sf_embeddings
 
         elif mode == "EM+sf":
-            embeddings += ae_match_embeddings + tf_embeddings + idf_embeddings + sf_embeddings
+            embeddings += amatch_embeddings + tf_embeddings + idf_embeddings + sf_embeddings
 
         elif mode == "tf+sf":
-            embeddings += ae_match_embeddings + tf_embeddings + sf_embeddings
+            embeddings += amatch_embeddings + tf_embeddings + sf_embeddings
 
         elif mode == "idf_sf":
-            embeddings += ae_match_embeddings + idf_embeddings + sf_embeddings
+            embeddings += amatch_embeddings + idf_embeddings + sf_embeddings
 
         else:
             raise Exception("mode error: {}".format(mode))
@@ -99,7 +99,7 @@ class BertModelPlus(BertModel):
         self.init_weights()
 
     def forward(self, input_ids=None, tf_type=None, idf_type=None, token_type_ids=None, attention_mask=None,
-                position_ids=None, atype_ent_match=None, sf_type=None,
+                position_ids=None, amatch_type=None, sf_type=None,
                 head_mask=None, inputs_embeds=None, encoder_hidden_states=None, encoder_attention_mask=None, mode=None):
 
         if input_ids is not None and inputs_embeds is not None:
@@ -186,7 +186,7 @@ class BertModelPlus(BertModel):
         embedding_output = self.embeddings(input_ids=input_ids, tf_type=tf_type, idf_type=idf_type,
                                            position_ids=position_ids, token_type_ids=token_type_ids,
                                            inputs_embeds=inputs_embeds,
-                                           atype_ent_match=atype_ent_match,
+                                           amatch_type=amatch_type,
 										   sf_type=sf_type,
                                            mode=mode)
         encoder_outputs = self.encoder(embedding_output,
@@ -202,9 +202,9 @@ class BertModelPlus(BertModel):
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
 
 
-class EntityMatchModel(BertPreTrainedModel):
+class AmatchModel(BertPreTrainedModel):
     def __init__(self, config):
-        super(EntityMatchModel, self).__init__(config)
+        super(AmatchModel, self).__init__(config)
         self.bert = BertModelPlus(config)
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
@@ -218,7 +218,7 @@ class EntityMatchModel(BertPreTrainedModel):
         _, q_poolout = self.bert(batch['input_ids'], batch['tf_type'], batch['idf_type'],
                                  token_type_ids=batch['token_type_ids'],
                                  attention_mask=batch['attention_mask'],
-                                 atype_ent_match=batch['atype_ent_match'],
+                                 amatch_type=batch['amatch_type'],
 								 sf_type=batch['sf_type'],
                                  mode=self.mode)
 

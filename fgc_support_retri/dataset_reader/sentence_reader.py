@@ -25,6 +25,8 @@ atype2etype = {'Person': ['PER'],
                'Num-Measure': ['NUMBER', 'ORDINAL', 'NUMBER', 'PERCENT'],
                'Date-Duration': ['DATE', 'TIME', 'DURATION', 'DYNASTY']}
 
+Undefined_atype = set(ATYPE_LIST) - set(atype2etype.keys())
+
 DEBUG = 0
 sf_level = 10
 qsim_level = 10
@@ -200,6 +202,16 @@ class SentIdx:
             if etype in atype2etype[atype]:
                 return True
         return False
+    
+    @staticmethod
+    def get_amatch_type(atype, etype):
+        if atype in Undefined_atype:
+            return 3 # Unsure
+        else:
+            if etype in atype2etype[atype]:
+                return 1 # Exact match
+            else:
+                return 2 # Not match
 
     def compare_match(self, tokenized_a, a_embeds, etype_a, tokenized_b, b_embeds, tokenized_context,
                       context_tokenized_sents, context_sents_num, atype):
@@ -210,6 +222,7 @@ class SentIdx:
         sf_score_a = []
         qsim_a = [0] * len(tokenized_a)
         atype_ent_match_a = [0] * len(tokenized_a)
+        amatch_type_a = [0] * len(tokenized_a)
 
         for i, (token_a, a_emb) in enumerate(zip(tokenized_a, a_embeds)):
             if token_a in tokenized_b:
@@ -232,11 +245,14 @@ class SentIdx:
             for level, bound in enumerate(self.qsim_level_list):
                 if bound[0] <= asim_score < bound[1]:
                     qsim_a[i] = level
-
+                    
+            if id2ETYPE[etype_a[i]] != 'O':
+                amatch_type_a[i] = self.get_amatch_type(atype, id2ETYPE[etype_a[i]])
+            
             if self.is_matched_atype_etype(atype, id2ETYPE[etype_a[i]]):
                 atype_ent_match_a[i] = 1
 
-        return tf_match_a, idf_match_a, sf_type_a, qsim_a, atype_ent_match_a, sf_score_a
+        return tf_match_a, idf_match_a, sf_type_a, qsim_a, atype_ent_match_a, sf_score_a, amatch_type_a
 
     def __call__(self, sample):
 
@@ -260,11 +276,11 @@ class SentIdx:
         atype = sample['atype']
         atype_label = ATYPE2id[atype]
         # q
-        tf_match_q, idf_match_q, sf_type_q, qsim_q, atype_ent_match_q, sf_score_q = \
+        tf_match_q, idf_match_q, sf_type_q, qsim_q, atype_ent_match_q, sf_score_q, amatch_type_q = \
             self.compare_match(tokenized_q, q_embeds, etype_q, tokenized_s, s_embeds, tokenized_context,
                                context_tokenized_sents, context_sents_num, atype)
         # target
-        tf_match_s, idf_match_s, sf_type_s, qsim_s, atype_ent_match_s, sf_score_s = \
+        tf_match_s, idf_match_s, sf_type_s, qsim_s, atype_ent_match_s, sf_score_s, amatch_type_s = \
             self.compare_match(tokenized_s, s_embeds, etype_s, tokenized_q, q_embeds, tokenized_context,
                                context_tokenized_sents, context_sents_num, atype)
 
@@ -278,6 +294,7 @@ class SentIdx:
         qsim_type = [0] + qsim_q + [0] + qsim_s
         atype_ent_match = [0] + atype_ent_match_q + [0] + atype_ent_match_s
         sf_score_all = [1] + sf_score_q + [1] + sf_score_s
+        amatch_type = [0] + amatch_type_q + [0] + amatch_type_s
 
         if len(tokenized_all) > 511:
             if DEBUG > 0:
@@ -290,6 +307,7 @@ class SentIdx:
             etype_all = etype_all[:511]
             atype_ent_match = atype_ent_match[:511]
             sf_score_all = sf_score_all[:511]
+            amatch_type = amatch_type[:511]
 
         if len(tokenized_q) > 511:
             if DEBUG > 0:
@@ -307,6 +325,7 @@ class SentIdx:
         qsim_type += [0]
         atype_ent_match += [0]
         sf_score_all += [1]
+        amatch_type += [0]
 
         ids_all = self.tokenizer.convert_tokens_to_ids(tokenized_all)
         ids_q = self.tokenizer.convert_tokens_to_ids(tokenized_q)
@@ -326,6 +345,7 @@ class SentIdx:
         sample['atype_label'] = atype_label
         sample['atype_ent_match'] = atype_ent_match
         sample['sf_score'] = sf_score_all
+        sample['amatch_type'] = amatch_type
 
         return sample
 
@@ -342,6 +362,7 @@ def Sent_collate(batch):
     etype_ids = pad_sequence([torch.tensor(sample['etype_ids']) for sample in batch], batch_first=True)
     atype_ent_match = pad_sequence([torch.tensor(sample['atype_ent_match']) for sample in batch], batch_first=True)
     sf_score = pad_sequence([torch.tensor(sample['sf_score']) for sample in batch], batch_first=True)
+    amatch_type = pad_sequence([torch.tensor(sample['amatch_type']) for sample in batch], batch_first=True)
 
     out = {'input_ids': input_ids_batch.to("cpu"),
            'question_ids': question_ids_batch.to("cpu"),
@@ -353,7 +374,8 @@ def Sent_collate(batch):
            'qsim_type': qsim_type.to("cpu"),
            'atype_ent_match': atype_ent_match.to("cpu"),
            'etype_ids': etype_ids.to("cpu"),
-           'sf_score': sf_score.to("cpu")}
+           'sf_score': sf_score.to("cpu"),
+           'amatch_type': amatch_type.to("cpu")}
 
     if 'label' in batch[0].keys():
         out['label'] = torch.tensor([sample['label'] for sample in batch]).to("cpu")

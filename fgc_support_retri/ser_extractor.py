@@ -15,6 +15,7 @@ from .nn_model.syn_model import SynSERModel
 from .nn_model.entity_model import EntitySERModel
 from .nn_model.entity_match_model import EntityMatchModel
 from .nn_model.sgroup_model import SGroupModel
+from .nn_model.amatch_model import AmatchModel
 from .utils import get_model_path
 
 bert_model_name = config.BERT_EMBEDDING_ZH
@@ -86,6 +87,27 @@ class Extractor:
                 sp_preds, atype_preds, sp_scores = self.predict(q, d)
                 q['sp'] = sp_preds
                 q['sp_scores'] = sp_scores
+
+
+class EntityMatch_extractor(Extractor):
+    def __init__(self, model_folder, mode):
+        input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'amatch_type',
+                       'sf_type']
+        dataset_reader = SerSentenceDataset
+        super(EntityMatch_extractor, self).__init__(input_names, dataset_reader)
+        
+        model = AmatchModel.from_pretrained(bert_model_name)
+        model_path = get_model_path(model_folder)
+        model.load_state_dict(torch.load(model_path, map_location=self.device))
+        model.to_mode(mode)
+        model.to(self.device)
+        model.eval()
+        self.model = model
+        
+        pretrained_bert = BertModel.from_pretrained(bert_model_name)
+        pretrained_bert.eval()
+        self.indexer = SentIdx(self.tokenizer, pretrained_bert)
+        self.collate_fn = Sent_collate
     
 
 class Sgroup_extractor(Extractor):

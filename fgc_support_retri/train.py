@@ -21,6 +21,7 @@ from .nn_model.multitask_model import MultiSERModel
 from .nn_model.entity_model import EntitySERModel
 from .nn_model.entity_match_model import EntityMatchModel
 from .nn_model.sgroup_model import SGroupModel
+from .nn_model.amatch_model import AmatchModel
 from .evaluation.eval import eval_sp_fgc, eval_fgc_atype
 
 bert_model_name = config.BERT_EMBEDDING_ZH
@@ -188,6 +189,26 @@ def train_sgroup_model(num_epochs, batch_size, model_file_name, lr, is_hinge=Fal
     indexer = SGroupIdx(tokenizer, pretrained_bert)
     input_names = ['input_ids', 'token_type_ids', 'attention_mask',
                    'tf_type', 'idf_type', 'sf_score', 'atype_ent_match']
+    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
+    trainer.train(num_epochs, batch_size, model_file_name, is_score=is_score)
+
+
+def train_amatch_model(num_epochs, batch_size, model_file_name, mode, lr, is_hinge=False, is_score=False):
+    dataset_reader = SerSentenceDataset
+    
+    tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+    pretrained_bert = BertModel.from_pretrained(bert_model_name)
+    pretrained_bert.eval()
+    
+    model = AmatchModel.from_pretrained(bert_model_name)
+    model.to_mode(mode)
+    if is_hinge:
+        model.criterion = torch.nn.HingeEmbeddingLoss()
+    
+    collate_fn = Sent_collate
+    indexer = SentIdx(tokenizer, pretrained_bert)
+    
+    input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'amatch_type', 'sf_type']
     trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
     trainer.train(num_epochs, batch_size, model_file_name, is_score=is_score)
     
