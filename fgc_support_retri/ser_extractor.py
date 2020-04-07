@@ -17,6 +17,7 @@ from .nn_model.entity_match_model import EntityMatchModel
 from .nn_model.sgroup_model import SGroupModel
 from .nn_model.amatch_model import AmatchModel
 from .utils import get_model_path
+from .extractor_stage2 import stage2_extract
 
 bert_model_name = config.BERT_EMBEDDING_ZH
 
@@ -50,7 +51,7 @@ class Extractor:
 
         return {'sp': sp, 'sp_scores': scores}
     
-    def predict(self, q, d, threshold=0.5):
+    def predict_stage1(self, q, d, threshold=0.5):
         with torch.no_grad():
             sentence_instances = [self.indexer(item) for item in self.dataset_reader.get_items_in_q(q, d)]
             batch = self.collate_fn(sentence_instances)
@@ -77,6 +78,11 @@ class Extractor:
                 sp_scores = []
             
         return sp_preds, atype, sp_scores
+    
+    def predict(self, q, d, threshold=0.5):
+        sp1, atype, sp_scores1 = self.predict_stage1(q, d, threshold=threshold)
+        sp2, sp_scores2 = stage2_extract(d, sp1, sp_scores1)
+        return sp2, atype, sp_scores2
 
     def predict_all_documents(self, documents):
         for d in tqdm(documents):
@@ -89,12 +95,12 @@ class Extractor:
                 q['sp_scores'] = sp_scores
 
 
-class EntityMatch_extractor(Extractor):
+class AMatch_extractor(Extractor):
     def __init__(self, model_folder, mode):
         input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'amatch_type',
                        'sf_type']
         dataset_reader = SerSentenceDataset
-        super(EntityMatch_extractor, self).__init__(input_names, dataset_reader)
+        super(AMatch_extractor, self).__init__(input_names, dataset_reader)
         
         model = AmatchModel.from_pretrained(bert_model_name)
         model_path = get_model_path(model_folder)
@@ -248,6 +254,6 @@ class BertSER_extractor(Extractor):
         self.collate_fn = Sent_collate
     
        
-class Sp_extractor(Entity_extractor):
+class Sp_extractor(AMatch_extractor):
     def __init__(self, model_folder):
-        super(Sp_extractor, self).__init__(model_folder)
+        super(Sp_extractor, self).__init__(model_folder, 'EM+sf')
