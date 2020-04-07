@@ -122,12 +122,12 @@ def json_write(out, out_fp):
 def get_answer_sp(documents, force=False):
     for d in tqdm(documents):
         for q in d['QUESTIONS']:
-            if not q['SHINT']:
+            if not q['SHINT_']:
                 continue
                 
             answer_sp = set()
             if q['ATYPE'] == 'YesNo':
-                answer_sp = set(q['SHINT'])
+                answer_sp = set(q['SHINT_'])
             else:
                 for answer in q['ANSWER']:
                     for atoken in answer['ATOKEN']:
@@ -142,14 +142,14 @@ def get_answer_sp(documents, force=False):
             answer_sp.sort()
             if force:
                 if not answer_sp:
-                    answer_sp = q['SHINT']
+                    answer_sp = q['SHINT_']
             q['answer_sp'] = answer_sp
 
             
 def get_SHINT(documents):
     for d in tqdm(documents):
         for q in d['QUESTIONS']:
-            if not q['SHINT']:
+            if not q['SHINT_']:
                 continue
             shint = set()
             for aspan in q['ASPAN']:
@@ -162,7 +162,7 @@ def get_SHINT(documents):
                         shint.add(sent_i)
             shint = list(shint)
             shint.sort()
-            q['SHINT'] = shint
+            q['SHINT_'] = shint
 
             
 def max_atype(documents):
