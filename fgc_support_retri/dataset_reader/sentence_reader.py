@@ -32,6 +32,14 @@ sf_level = 10
 qsim_level = 10
 
 
+def get_atype(atype_dict):
+    max_score = 0
+    for atype, score in atype_dict.items():
+        if score > max_score:
+            best_atype = atype
+    return best_atype
+
+
 class SerSentenceDataset(Dataset):
     "Supporting evidence dataset"
 
@@ -84,8 +92,8 @@ class SerSentenceDataset(Dataset):
                     context_sents.append(context_s['text'])
 
             if q['ATYPE']:
-                assert q['ATYPE'] in ATYPE_LIST
-                atype = q['ATYPE']
+                atype = get_atype(q['ATYPE'])
+                assert atype in ATYPE_LIST
             else:
                 atype = 'Misc'
             out = {'QID': q['QID'], 'QTEXT': q['QTEXT_CN'], 'sentence': s['text'],
