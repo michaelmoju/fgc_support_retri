@@ -12,9 +12,9 @@ RESULT_PATH = PROJ_ROOT / "results"
 # FGC_TRAIN = DATA_ROOT / "FGC" / "1.5" / "FGC_release_all_train(cn).json"
 # FGC_TEST = DATA_ROOT / "FGC" / "1.5" / "FGC_release_all_test(cn).json"
 
-FGC_DEV = DATA_ROOT / "FGC" / "FGC_release_1.7.11" / "FGC_release_all_dev.json"
-FGC_TRAIN = DATA_ROOT / "FGC" / "FGC_release_1.7.11" / "FGC_release_all_train.json"
-FGC_TEST = DATA_ROOT / "FGC" / "FGC_release_1.7.11" / "FGC_release_all_test.json"
+FGC_DEV = DATA_ROOT / "FGC" / "FGC_release_1.7.13" / "FGC_release_all_dev.json"
+FGC_TRAIN = DATA_ROOT / "FGC" / "FGC_release_1.7.13" / "FGC_release_all_train.json"
+FGC_TEST = DATA_ROOT / "FGC" / "FGC_release_1.7.13" / "FGC_release_all_test.json"
 
 # FGC_DEV = DATA_ROOT / "FGC" / "FGC_release_1.7.8_shint_revise" / "FGC_release_all_dev.json"
 # FGC_TRAIN = DATA_ROOT / "FGC" / "FGC_release_1.7.8_shint_revise" / "FGC_release_all_train.json"

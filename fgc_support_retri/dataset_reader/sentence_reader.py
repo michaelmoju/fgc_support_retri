@@ -91,7 +91,7 @@ class SerSentenceDataset(Dataset):
                     other_context += context_s['text']
                     context_sents.append(context_s['text'])
 
-            if q['ATYPE']:
+            if 'ATYPE' in q.keys():
                 atype = get_atype(q['ATYPE'])
                 assert atype in ATYPE_LIST
             else:
