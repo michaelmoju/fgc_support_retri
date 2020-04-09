@@ -4,8 +4,7 @@ from tqdm import tqdm
 
 from . import config
 from .dataset_reader.sentence_reader import *
-from .dataset_reader.context_reader import *
-from .dataset_reader.cross_sent_reader import *
+from .dataset_reader.advance_sentence_reader import *
 from .dataset_reader.sentence_group_reader import * 
 from .nn_model.context_model import *
 from .nn_model.bert_model import *
@@ -16,6 +15,7 @@ from .nn_model.entity_model import EntitySERModel
 from .nn_model.entity_match_model import EntityMatchModel
 from .nn_model.sgroup_model import SGroupModel
 from .nn_model.amatch_model import AmatchModel
+from .nn_model.hierarchy_model import HierarchyModel
 from .utils import get_model_path
 from .extractor_stage2 import stage2_extract
 
@@ -93,6 +93,26 @@ class Extractor:
                 sp_preds, atype_preds, sp_scores = self.predict(q, d)
                 q['sp'] = sp_preds
                 q['sp_scores'] = sp_scores
+
+
+class Hierarchy_extractor(Extractor):
+    def __init__(self, model_folder, mode):
+        model = HierarchyModel.from_pretrained(bert_model_name)
+        model_path = get_model_path(model_folder)
+        model.load_state_dict(torch.load(model_path, map_location=self.device))
+        model.to_mode(mode)
+        model.to(self.device)
+        model.eval()
+        self.model = model
+        
+        input_names = model.input_names
+        dataset_reader = AdvSentenceDataset
+        super(Hierarchy_extractor, self).__init__(input_names, dataset_reader)
+        
+        pretrained_bert = BertModel.from_pretrained(bert_model_name)
+        pretrained_bert.eval()
+        self.indexer = AdvSentIndexer(self.tokenizer)
+        self.collate_fn = Sent_collate
 
 
 class AMatch_extractor(Extractor):

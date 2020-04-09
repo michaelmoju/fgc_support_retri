@@ -7,10 +7,9 @@ from transformers.tokenization_bert import BertTokenizer
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
 from . import config
-from .utils import read_fgc, json_load
-from .dataset_reader.context_reader import *
+from .utils import json_load
+from .dataset_reader.advance_sentence_reader import *
 from .dataset_reader.sentence_reader import *
-from .dataset_reader.cross_sent_reader import *
 from .dataset_reader.sentence_group_reader import * 
 from .nn_model.context_model import *
 from .nn_model.bert_model import *
@@ -21,6 +20,7 @@ from .nn_model.entity_model import EntitySERModel
 from .nn_model.entity_match_model import EntityMatchModel
 from .nn_model.sgroup_model import SGroupModel
 from .nn_model.amatch_model import AmatchModel
+from .nn_model.hierarchy_model import HierarchyModel
 from .evaluation.eval import eval_sp_fgc, eval_fgc_atype
 
 bert_model_name = config.BERT_EMBEDDING_ZH
@@ -136,7 +136,8 @@ class SER_Trainer:
         train_set = self.dataset_reader(train_documents, indexer=self.indexer, is_hinge=self.is_hinge,
                                        is_score=is_score)
         print('loader...')
-        dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=self.collate_fn)
+        dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=self.collate_fn,
+                                      num_workers=batch_size)
         
         # optimizer
         optimizer = AdamW(optimizer_grouped_parameters, lr=self.lr)
@@ -176,6 +177,27 @@ class SER_Trainer:
     
             if epoch_i % self.eval_frequency == 0:
                 self.eval(dev_batches, epoch_i, trained_model_path, sp_golds, atype_golds)
+
+
+def train_hierarchy_model(num_epochs, batch_size, model_file_name, mode, lr, is_hinge=False, is_score=False,
+                       train_documents=None):
+    dataset_reader = AdvSentenceDataset
+    
+    tokenizer = BertTokenizer.from_pretrained(bert_model_name)
+    pretrained_bert = BertModel.from_pretrained(bert_model_name)
+    pretrained_bert.eval()
+    
+    model = HierarchyModel.from_pretrained(bert_model_name)
+    model.to_mode(mode)
+    if is_hinge:
+        model.criterion = torch.nn.HingeEmbeddingLoss()
+    
+    collate_fn = AdvSent_collate
+    indexer = AdvSentIndexer(tokenizer, pretrained_bert)
+    
+    input_names = model.input_names
+    trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
+    trainer.train(num_epochs, batch_size, model_file_name, train_documents=train_documents, is_score=is_score)
 
     
 def train_sgroup_model(num_epochs, batch_size, model_file_name, lr, is_hinge=False, is_score=False):

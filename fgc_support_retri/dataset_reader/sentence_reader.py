@@ -10,6 +10,7 @@ DEBUG = 0
 sf_level = 10
 qsim_level = 10
 
+
 def is_whitespace(c):
         if c.strip() == '':
             return True
@@ -198,7 +199,9 @@ class SentIdx:
     
     @staticmethod
     def get_amatch_type(atype, etype):
-        if atype in Undefined_atype:
+        if etype == 'O':
+            return  0 # Not entity
+        elif atype in Undefined_atype:
             return 3 # Unsure
         else:
             if etype in atype2etype[atype]:
