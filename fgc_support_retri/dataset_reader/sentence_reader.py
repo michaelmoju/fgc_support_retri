@@ -11,7 +11,7 @@ sf_level = 10
 qsim_level = 10
 
 def is_whitespace(c):
-        if c == " " or c == "\t" or c == "\r" or c == "\n":
+        if c.strip() == '':
             return True
         return False
 
