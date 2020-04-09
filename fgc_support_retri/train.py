@@ -1,7 +1,6 @@
 import os
 from tqdm import tqdm
 import copy
-import math
 import torchvision
 from torch.utils.data import DataLoader
 from transformers.tokenization_bert import BertTokenizer
@@ -26,6 +25,7 @@ from .evaluation.eval import eval_sp_fgc, eval_fgc_atype
 
 bert_model_name = config.BERT_EMBEDDING_ZH
 
+NUM_WARMUP = 100
 
 class SER_Trainer:
     def __init__(self, model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=False):
@@ -122,15 +122,15 @@ class SER_Trainer:
             for q in d['QUESTIONS']:
                 if len(d['SENTS']) == 1:
                     continue
-                if not q['SHINT']:
+                if not q['SHINT_']:
                     continue
                     
                 q_instances = [self.indexer(item) for item in
                                self.dataset_reader.get_items_in_q(q, d, is_training=True, is_hinge=self.is_hinge, 
                                                                  is_score=is_score)]
                 dev_batches.append(q_instances)
-                sp_golds.append(q['SHINT'])
-                atype_golds.append(q['ATYPE'])
+                sp_golds.append(q['SHINT_'])
+                atype_golds.append(q['ATYPE_'])
         
         print('train_set indexing...')
         train_set = self.dataset_reader(train_documents, indexer=self.indexer, is_hinge=self.is_hinge,
@@ -140,10 +140,13 @@ class SER_Trainer:
         
         # optimizer
         optimizer = AdamW(optimizer_grouped_parameters, lr=self.lr)
-        num_train_optimization_steps = int(math.ceil(len(train_set) / batch_size)) * num_epochs
+        num_train_optimization_steps = len(dataloader_train) * num_epochs
+#         scheduler = get_linear_schedule_with_warmup(optimizer,
+#                                                     num_warmup_steps=int(
+#                                                         num_train_optimization_steps * self.warmup_proportion),
+#                                                     num_training_steps=num_train_optimization_steps)
         scheduler = get_linear_schedule_with_warmup(optimizer,
-                                                    num_warmup_steps=int(
-                                                        num_train_optimization_steps * self.warmup_proportion),
+                                                    num_warmup_steps=NUM_WARMUP,
                                                     num_training_steps=num_train_optimization_steps)
         
         print('start training ... ')
@@ -167,7 +170,8 @@ class SER_Trainer:
                 optimizer.step()
                 scheduler.step()
                 running_loss += loss.item()
-    
+            learning_rate_scalar = scheduler.get_lr()[0]
+            print('lr = %f' % learning_rate_scalar)
             print('epoch %d train_loss: %.3f' % (epoch_i, running_loss / len(dataloader_train)))
     
             if epoch_i % self.eval_frequency == 0:
@@ -193,7 +197,7 @@ def train_sgroup_model(num_epochs, batch_size, model_file_name, lr, is_hinge=Fal
     trainer.train(num_epochs, batch_size, model_file_name, is_score=is_score)
 
 
-def train_amatch_model(num_epochs, batch_size, model_file_name, mode, lr, is_hinge=False, is_score=False):
+def train_amatch_model(num_epochs, batch_size, model_file_name, mode, lr, is_hinge=False, is_score=False, train_documents=None):
     dataset_reader = SerSentenceDataset
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -210,10 +214,11 @@ def train_amatch_model(num_epochs, batch_size, model_file_name, mode, lr, is_hin
     
     input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'amatch_type', 'sf_type']
     trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
-    trainer.train(num_epochs, batch_size, model_file_name, is_score=is_score)
+    trainer.train(num_epochs, batch_size, model_file_name, train_documents=train_documents, is_score=is_score)
     
 
-def train_entity_match_model(num_epochs, batch_size, model_file_name, mode, lr, is_hinge=False, is_score=False):
+def train_entity_match_model(num_epochs, batch_size, model_file_name, mode, lr, is_hinge=False, is_score=False,
+                            train_documents=None):
     dataset_reader = SerSentenceDataset
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -230,10 +235,11 @@ def train_entity_match_model(num_epochs, batch_size, model_file_name, mode, lr, 
 
     input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'atype_ent_match', 'sf_type']
     trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
-    trainer.train(num_epochs, batch_size, model_file_name, is_score=is_score)
+    trainer.train(num_epochs, batch_size, model_file_name, train_documents=train_documents, is_score=is_score)
 
 
-def train_entity_model(num_epochs, batch_size, model_file_name, mode, lr, is_hinge=False, is_score=False):
+def train_entity_model(num_epochs, batch_size, model_file_name, mode, lr, is_hinge=False, is_score=False,
+                      train_documents=None):
     dataset_reader = SerSentenceDataset
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -250,10 +256,10 @@ def train_entity_model(num_epochs, batch_size, model_file_name, mode, lr, is_hin
 
     input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'etype_ids', 'sf_type']
     trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
-    trainer.train(num_epochs, batch_size, model_file_name, is_score=is_score)
+    trainer.train(num_epochs, batch_size, model_file_name, train_documents=train_documents, is_score=is_score)
 
 
-def train_MultiSERModel(num_epochs, batch_size, model_file_name, lr, is_hinge=False):
+def train_MultiSERModel(num_epochs, batch_size, model_file_name, lr, is_hinge=False, train_documents=None):
     dataset_reader = SerSentenceDataset
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -295,7 +301,7 @@ def train_SynSERModel(num_epochs, batch_size, model_file_name, lr, is_hinge=Fals
     trainer.train(num_epochs, batch_size, model_file_name)
 
 
-def train_EMSERModel(num_epochs, batch_size, model_file_name, lr, is_hinge=False):
+def train_EMSERModel(num_epochs, batch_size, model_file_name, lr, is_hinge=False, train_documents=None):
     dataset_reader = SerSentenceDataset
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -312,10 +318,10 @@ def train_EMSERModel(num_epochs, batch_size, model_file_name, lr, is_hinge=False
     input_names = ['input_ids', 'question_ids', 'token_type_ids', 'attention_mask', 'tf_type', 'idf_type', 'sf_type',
                         'qsim_type', 'label']
     trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
-    trainer.train(num_epochs, batch_size, model_file_name)
+    trainer.train(num_epochs, batch_size, model_file_name, train_documents=train_documents)
     
     
-def train_BertSERModel(num_epochs, batch_size, model_file_name, lr, is_hinge=False):
+def train_BertSERModel(num_epochs, batch_size, model_file_name, lr, is_hinge=False, train_documents=None):
     dataset_reader = SerSentenceDataset
     
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
@@ -331,4 +337,4 @@ def train_BertSERModel(num_epochs, batch_size, model_file_name, lr, is_hinge=Fal
     indexer = SentIdx(tokenizer, pretrained_bert)
     input_names = ['input_ids', 'token_type_ids', 'attention_mask', 'label']
     trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)
-    trainer.train(num_epochs, batch_size, model_file_name)
+    trainer.train(num_epochs, batch_size, model_file_name, train_documents=train_documents)

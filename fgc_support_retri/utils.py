@@ -126,7 +126,7 @@ def get_answer_sp(documents, force=False):
                 continue
                 
             answer_sp = set()
-            if q['ATYPE'] == 'YesNo':
+            if q['ATYPE_'] == 'YesNo':
                 answer_sp = set(q['SHINT_'])
             else:
                 for answer in q['ANSWER']:

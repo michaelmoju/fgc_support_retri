@@ -4,32 +4,16 @@ from torch.utils.data import Dataset
 import torch.nn.functional as F
 from ..utils import normalize_etype, get_answer_sp
 from tqdm import tqdm
-
-ATYPE_LIST = ['Person', 'Date-Duration', 'Location', 'Organization',
-              'Num-Measure', 'YesNo', 'Kinship', 'Event', 'Object', 'Misc']
-ATYPE2id = {type: idx for idx, type in enumerate(ATYPE_LIST)}
-id2ATYPE = {v: k for k, v in ATYPE2id.items()}
-ETYPE_LIST = ['O',
-              'FACILITY', 'GPE', 'NATIONALITY', 'DEGREE', 'DEMONYM',
-              'PER', 'LOC', 'ORG', 'MISC',
-              'MONEY', 'NUMBER', 'ORDINAL', 'PERCENT',
-              'DATE', 'TIME', 'DURATION', 'SET',
-              'EMAIL', 'URL', 'CITY', 'STATE_OR_PROVINCE', 'COUNTRY', 'RELIGION',
-              'TITLE', 'IDEOLOGY', 'CRIMINAL_CHARGE', 'CAUSE_OF_DEATH', 'DYNASTY']
-ETYPE2id = {v: k for k, v in enumerate(ETYPE_LIST)}
-id2ETYPE = {v: k for k, v in ETYPE2id.items()}
-
-atype2etype = {'Person': ['PER'],
-               'Location': ['LOC', 'GPE', 'STATE_OR_PROVINCE', 'CITY', 'COUNTRY'],
-               'Organization': ['ORG', 'COUNTRY'],
-               'Num-Measure': ['NUMBER', 'ORDINAL', 'NUMBER', 'PERCENT'],
-               'Date-Duration': ['DATE', 'TIME', 'DURATION', 'DYNASTY']}
-
-Undefined_atype = set(ATYPE_LIST) - set(atype2etype.keys())
+from ..fgc_config import *
 
 DEBUG = 0
 sf_level = 10
 qsim_level = 10
+
+def is_whitespace(c):
+        if c == " " or c == "\t" or c == "\r" or c == "\n":
+            return True
+        return False
 
 
 def get_atype(atype_dict):
@@ -37,6 +21,7 @@ def get_atype(atype_dict):
     for atype, score in atype_dict.items():
         if score > max_score:
             best_atype = atype
+            max_score = score
     return best_atype
 
 
@@ -102,7 +87,7 @@ class SerSentenceDataset(Dataset):
                    's_ne': s_ne, 's_piece': s_string_pieces}
 
             if is_training:
-                if target_i in q['SHINT']:
+                if target_i in q['SHINT_']:
                     if is_score:
                         if target_i in q['answer_sp']:
                             out['label'] = 0.5
@@ -192,7 +177,7 @@ class SentIdx:
         out_tokenized = []
         out_etype = []
         for idx, p in enumerate(piece):
-            if piece == '\n':
+            if is_whitespace(p):
                 continue
             tokenized_p = self.tokenizer.tokenize(p)
             out_tokenized += tokenized_p

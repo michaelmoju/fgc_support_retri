@@ -16,7 +16,7 @@ class BertEmbeddingsPlus(nn.Module):
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
         self.tf_embeddings = nn.Embedding(2, config.hidden_size)
         self.idf_embeddings = nn.Embedding(2, config.hidden_size)
-        self.amatch_embeddings = nn.Embedding(2, config.hidden_size)
+        self.amatch_embeddings = nn.Embedding(4, config.hidden_size)
         self.sf_embeddings = nn.Embedding(sf_level, config.hidden_size)
 
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -49,7 +49,7 @@ class BertEmbeddingsPlus(nn.Module):
             inputs_embeds = self.word_embeddings(input_ids)
 
         position_embeddings = self.position_embeddings(position_ids)
-        amatch_embeddings = self.amatch_embeddings((amatch_type > 0).long())
+        amatch_embeddings = self.amatch_embeddings(amatch_type)
         token_type_embeddings = self.token_type_embeddings((token_type_ids > 0).long())
         tf_embeddings = self.tf_embeddings((tf_type > 0).long())
         idf_embeddings = self.idf_embeddings((idf_type > 0).long())
