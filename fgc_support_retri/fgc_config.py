@@ -14,8 +14,8 @@ id2ETYPE = {v: k for k, v in ETYPE2id.items()}
 
 atype2etype = {'Person': ['PER'],
                'Location': ['LOC', 'GPE', 'STATE_OR_PROVINCE', 'CITY', 'COUNTRY'],
-               'Organization': ['ORG', 'COUNTRY'],
-               'Num-Measure': ['NUMBER', 'ORDINAL', 'NUMBER', 'PERCENT'],
+               'Organization': ['ORG', 'COUNTRY', 'LOC', 'GPE'],
+               'Num-Measure': ['NUMBER', 'ORDINAL', 'NUMBER', 'PERCENT', 'MONEY'],
                'Date-Duration': ['DATE', 'TIME', 'DURATION', 'DYNASTY']}
 
 Undefined_atype = set(ATYPE_LIST) - set(atype2etype.keys())
