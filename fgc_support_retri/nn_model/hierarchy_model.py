@@ -68,7 +68,7 @@ class BertEmbeddingsPlus(nn.Module):
 		sf_token_embeddings = self.sf_token_embeddings(sf_token)
 		etype_ids_embeddings = self.etype_ids_embeddings(etype_ids)
 		atype_ent_match_embeddings = self.atype_ent_match_embeddings(atype_ent_match)
-		amatch_type_embeddings = self.amatch_type_embeddings(amatch_type)
+		amatch_type_embeddings = self.amatch_embeddings(amatch_type)
 		
 		embeddings = (
 				inputs_embeds
@@ -226,6 +226,7 @@ class HierarchyModel(BertPreTrainedModel):
 	def forward_nn(self, batch):
 		_, q_poolout = self.bert(input_ids=batch['input_ids'],
 		                         token_type_ids=batch['token_type_ids'],
+                                 attention_mask = batch['attention_mask'],
 		                         match_entity=batch['match_entity'],
 		                         sf_entity=batch['sf_entity'],
 		                         match_token=batch['match_token'],

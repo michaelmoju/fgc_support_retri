@@ -84,7 +84,7 @@ def get_sent_ie(sp_i, d):
     return out_string
 
 
-def get_analysis(data):
+def get_analysis(data, sent_mode='limit'):
     out_string = ""
     for d in data:
         for q in d['QUESTIONS']:
@@ -93,21 +93,39 @@ def get_analysis(data):
             out_string += q['QID'] + '\n'
             out_string += q['QTEXT_CN'] + '\n'
             out_string += "atype:{}".format(q['ATYPE_']) + '\n'
-            out_string += "gold_se:{}".format(q['SHINT_']) + '\n'
-            out_string += "answer_se:{}".format(q['answer_sp']) + '\n'
-            out_string += "predict_se:{}".format(q['sp']) + '\n'
+            out_string += "answer:{}".format([ans['ATEXT_CN'] for ans in q['ANSWER']]) + '\n'
+            out_string += "gold_SE:{}".format(q['SHINT_']) + '\n'
+            out_string += "answer_SE:{}".format(q['answer_sp']) + '\n'
+            out_string += "predict_SE:{}".format(q['sp']) + '\n'
             out_string += '\n'
             all_set = set(q['SHINT_']) | set(q['sp'])
-            for sp_i in range(min(all_set), max(all_set)+1):
-                out_string += str(q['sp_scores'][sp_i]) + '\n'
-                out_string += get_sent_ie(sp_i, d)
-                out_string += '\n'
+            if sent_mode == 'only':
+                all_list = list(all_set)
+                all_list.sort()
+                for sp_i in all_list:
+                    out_string += str(q['sp_scores'][sp_i]) + '\n'
+                    out_string += get_sent_ie(sp_i, d)
+                    out_string += '\n'
+                    
+            elif sent_mode == 'limit':
+                for sp_i in range(min(all_set), max(all_set)+1):
+                    out_string += str(q['sp_scores'][sp_i]) + '\n'
+                    out_string += get_sent_ie(sp_i, d)
+                    out_string += '\n'
+                    
+            elif sent_mode == 'all':
+                for sp_i in range(len(d['SENTS'])):
+                    out_string += str(q['sp_scores'][sp_i]) + '\n'
+                    out_string += get_sent_ie(sp_i, d)
+                    out_string += '\n'
+        
+        out_string += '=================================================\n'
     return out_string
 
 
-def write_analysis(fname, data):
+def write_analysis(fname, data, sent_mode='limit'):
     f=open(config.PREDICTION_PATH / fname, 'w')
-    f.write(get_analysis(data))
+    f.write(get_analysis(data, sent_mode))
     f.close()
 
 

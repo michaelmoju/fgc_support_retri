@@ -181,11 +181,8 @@ class SER_Trainer:
 
 def train_hierarchy_model(num_epochs, batch_size, model_file_name, mode, lr, is_hinge=False, is_score=False,
                        train_documents=None):
-    dataset_reader = AdvSentenceDataset
-    
+    dataset_reader = AdvSentenceDataset  
     tokenizer = BertTokenizer.from_pretrained(bert_model_name)
-    pretrained_bert = BertModel.from_pretrained(bert_model_name)
-    pretrained_bert.eval()
     
     model = HierarchyModel.from_pretrained(bert_model_name)
     model.to_mode(mode)
@@ -193,7 +190,7 @@ def train_hierarchy_model(num_epochs, batch_size, model_file_name, mode, lr, is_
         model.criterion = torch.nn.HingeEmbeddingLoss()
     
     collate_fn = AdvSent_collate
-    indexer = AdvSentIndexer(tokenizer, pretrained_bert)
+    indexer = AdvSentIndexer(tokenizer)
     
     input_names = model.input_names
     trainer = SER_Trainer(model, collate_fn, indexer, dataset_reader, input_names, lr, is_hinge=is_hinge)

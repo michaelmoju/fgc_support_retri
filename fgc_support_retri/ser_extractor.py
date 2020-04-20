@@ -98,6 +98,10 @@ class Extractor:
 class Hierarchy_extractor(Extractor):
     def __init__(self, model_folder, mode):
         model = HierarchyModel.from_pretrained(bert_model_name)
+        input_names = model.input_names
+        dataset_reader = AdvSentenceDataset
+        super(Hierarchy_extractor, self).__init__(input_names, dataset_reader)
+        
         model_path = get_model_path(model_folder)
         model.load_state_dict(torch.load(model_path, map_location=self.device))
         model.to_mode(mode)
@@ -105,14 +109,10 @@ class Hierarchy_extractor(Extractor):
         model.eval()
         self.model = model
         
-        input_names = model.input_names
-        dataset_reader = AdvSentenceDataset
-        super(Hierarchy_extractor, self).__init__(input_names, dataset_reader)
-        
         pretrained_bert = BertModel.from_pretrained(bert_model_name)
         pretrained_bert.eval()
         self.indexer = AdvSentIndexer(self.tokenizer)
-        self.collate_fn = Sent_collate
+        self.collate_fn = AdvSent_collate
 
 
 class AMatch_extractor(Extractor):

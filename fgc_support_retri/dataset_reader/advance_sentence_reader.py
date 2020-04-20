@@ -20,6 +20,7 @@ def get_sf_level(sf, sf_level_list):
     for level, bound in enumerate(sf_level_list):
         if bound[0] <= sf < bound[1]:
             return level
+    return len(sf_level_list) - 1 
 
 
 def token_get_ne(token, ne_list):
