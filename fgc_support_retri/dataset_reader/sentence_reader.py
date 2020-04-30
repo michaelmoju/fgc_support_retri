@@ -10,6 +10,7 @@ DEBUG = 0
 sf_level = 10
 qsim_level = 10
 
+IS_ANS2ENT = True # whether to treat answer as matched entity
 
 def is_whitespace(c):
         if c.strip() == '':
@@ -25,18 +26,33 @@ def get_atype(atype_dict):
             max_score = score
     return best_atype
 
+def is_overlap(span_a, span_b):
+    index_a = set([i for i in range(span_a[0], span_a[1])])
+    index_b = set([i for i in range(span_b[0], span_b[1])])
+    return True if index_a.intersection(index_b) else False
+
+def is_overlap_with_atoken(span_ne, atokens):
+    for atoken in atokens:
+        if is_overlap(span_ne, atoken):
+            return atoken
+    return False
 
 class SerSentenceDataset(Dataset):
     "Supporting evidence dataset"
 
     @staticmethod
-    def get_ne(ner_list, input_string):
-        out_ne = {}
+    def get_ne(ner_list, input_string, atokens=[]):
         string_b = 0
         string_pieces = []
+        
+        insert_spans = []
         for ne in ner_list:
             char_b = ne['char_b']
             char_e = ne['char_e']
+                
+            if is_overlap_with_atoken((char_b, char_e), atokens):
+                continue
+
             if (input_string[char_b] != ne['string'][0] and input_string[char_e - 1] != ne['string'][-1]):
                 #             if input_string[char_b:char_e] != ne['string']:
                 if DEBUG == 1:
@@ -48,10 +64,23 @@ class SerSentenceDataset(Dataset):
                     print(ne)
                 continue
             # assert input_string[char_b:char_e] == ne['string']
-            string_pieces.append(input_string[string_b:char_b])
-            string_pieces.append(input_string[char_b:char_e])
-            out_ne[len(string_pieces) - 1] = normalize_etype(ne['type'])  # out_ne = {ne_piece_idx : etype]
-            string_b = char_e
+            insert_spans.append((char_b, char_e, normalize_etype(ne['type'])))
+        
+        # append atokens
+        insert_spans += [(t[0], t[1], 'AMATCH') for t in atokens]
+        
+        string_b = 0
+        string_pieces = []
+        out_ne = {}
+                                
+        insert_spans.sort(key=lambda span: span[0])
+        for span in insert_spans:
+            string_pieces.append(input_string[string_b:span[0]])
+            string_pieces.append(input_string[span[0]:span[1]])
+            out_ne[len(string_pieces) - 1] = span[2]  # out_ne = {ne_piece_idx : etype]
+            string_b = span[1]
+        
+        # add the remaining txt
         if string_b < len(input_string):
             string_pieces.append(input_string[string_b:])
         return out_ne, string_pieces
@@ -59,6 +88,29 @@ class SerSentenceDataset(Dataset):
     @staticmethod
     def get_items_in_q(q, d, is_training=False, is_hinge=False, is_score=False):
         for target_i, s in enumerate(d['SENTS']):
+            # atoken
+            atokens = []
+            if IS_ANS2ENT:
+                for atoken in q['ANSWER'][0]['ATOKEN']:
+                    if s['start'] <= atoken['start'] < s['end']:
+                        if not (s['start'] < atoken['end'] <= s['end']):
+                            print('cross sentence atoken')
+                            print(s['text'])
+                            print(s['start'])
+                            print(s['end'])
+                            print(atoken)
+#                         assert s['start'] < atoken['end'] <= s['end'], 'atoken cross sentence!'
+                        atoken_txt = atoken['text_cn']
+                        atoken_start = atoken['start'] - s['start']
+                        atoken_end = atoken['end'] - s['start']
+                        if s['text'][atoken_start:atoken_end] != atoken_txt:
+                            print(s['text'][atoken_start:atoken_end])
+                            print(atoken_txt)
+                            print('=======================')
+#                         assert s['text'][atoken_start:atoken_end] == atoken_txt, 'atoken snt position error!'
+                        atokens.append((atoken_start, atoken_end))
+                    
+            # ner 
             q_ner_list = []
             for q_sent in q['SENTS']:
                 for ne in q_sent['IE']['NER']:
@@ -68,7 +120,7 @@ class SerSentenceDataset(Dataset):
                                        'char_e': ne['char_e'] + q_sent['start']})
             q_ne, q_string_pieces = SerSentenceDataset.get_ne(q_ner_list, q['QTEXT_CN'])
 
-            s_ne, s_string_pieces = SerSentenceDataset.get_ne(s['IE']['NER'], s['text'])
+            s_ne, s_string_pieces = SerSentenceDataset.get_ne(s['IE']['NER'], s['text'], atokens)
 
             other_context = ""
             context_sents = []
@@ -111,6 +163,8 @@ class SerSentenceDataset(Dataset):
         for d in tqdm(documents):
             for q in d['QUESTIONS']:
                 if len(d['SENTS']) == 1:
+                    continue
+                if not q['SHINT_']:
                     continue
                 for instance in self.get_items_in_q(q, d, is_training=True, is_hinge=is_hinge, is_score=is_score):
                     if indexer:
@@ -192,6 +246,8 @@ class SentIdx:
 
     @staticmethod
     def is_matched_atype_etype(atype, etype):
+        if etype == 'AMATCH':
+            return True
         if atype in atype2etype:
             if etype in atype2etype[atype]:
                 return True
