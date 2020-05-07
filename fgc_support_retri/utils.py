@@ -1,6 +1,16 @@
-import os
+import os, sys
 import json
 from tqdm import tqdm
+
+DEBUG = 0
+
+
+def lprint(*args, **kwargs):
+	import inspect
+	callerFrame = inspect.stack()[1]  # 0 represents this line
+	myInfo = inspect.getframeinfo(callerFrame[0])
+	myFilename = os.path.basename(myInfo.filename)
+	print('{}({}):'.format(myFilename, myInfo.lineno), *args, flush=True, file=sys.stderr, **kwargs)
 
 
 def normalize_etype(ori_etype):
@@ -133,10 +143,11 @@ def get_answer_sp(documents, force=False):
                     for atoken in answer['ATOKEN']:
                         for sent_i, sent in enumerate(d['SENTS']):
                             if sent['end'] > atoken['start'] >= sent['start']:
-                                if not sent['end'] >= atoken['end'] > sent['start']:
-                                    print(q['QID'])
-                                    print(sent)
-                                    print(atoken)
+                                if DEBUG > 0:
+                                    if not sent['end'] >= atoken['end'] > sent['start']:
+                                        lprint(q['QID'])
+                                        lprint(sent)
+                                        lprint(atoken)
                                 answer_sp.add(sent_i)
             answer_sp = list(answer_sp)
             answer_sp.sort()

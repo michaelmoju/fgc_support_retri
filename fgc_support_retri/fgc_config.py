@@ -19,3 +19,8 @@ atype2etype = {'Person': ['PER'],
                'Date-Duration': ['DATE', 'TIME', 'DURATION', 'DYNASTY']}
 
 Undefined_atype = set(ATYPE_LIST) - set(atype2etype.keys())
+
+# Prior study config
+IS_ANS2ENT = True
+IS_DOWN_SAMPLE = True
+

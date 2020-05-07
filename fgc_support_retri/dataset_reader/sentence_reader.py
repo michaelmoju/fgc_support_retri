@@ -10,8 +10,6 @@ DEBUG = 0
 sf_level = 10
 qsim_level = 10
 
-IS_ANS2ENT = True # whether to treat answer as matched entity
-
 def is_whitespace(c):
         if c.strip() == '':
             return True
@@ -55,7 +53,7 @@ class SerSentenceDataset(Dataset):
 
             if (input_string[char_b] != ne['string'][0] and input_string[char_e - 1] != ne['string'][-1]):
                 #             if input_string[char_b:char_e] != ne['string']:
-                if DEBUG == 1:
+                if DEBUG > 0:
                     print("input_string:")
                     print(input_string)
                     print("input_string[char_b:char_e]:")
@@ -86,7 +84,7 @@ class SerSentenceDataset(Dataset):
         return out_ne, string_pieces
 
     @staticmethod
-    def get_items_in_q(q, d, is_training=False, is_hinge=False, is_score=False):
+    def get_items_in_q(q, d, is_training=False, is_down_sample=False, is_hinge=False, is_score=False):
         for target_i, s in enumerate(d['SENTS']):
             # atoken
             atokens = []
@@ -94,20 +92,22 @@ class SerSentenceDataset(Dataset):
                 for atoken in q['ANSWER'][0]['ATOKEN']:
                     if s['start'] <= atoken['start'] < s['end']:
                         if not (s['start'] < atoken['end'] <= s['end']):
-                            print('cross sentence atoken')
-                            print(s['text'])
-                            print(s['start'])
-                            print(s['end'])
-                            print(atoken)
+                            if DEBUG > 0:
+                                print('cross sentence atoken')
+                                print(s['text'])
+                                print(s['start'])
+                                print(s['end'])
+                                print(atoken)
 #                         assert s['start'] < atoken['end'] <= s['end'], 'atoken cross sentence!'
                         atoken_txt = atoken['text_cn']
                         atoken_start = atoken['start'] - s['start']
                         atoken_end = atoken['end'] - s['start']
-                        if s['text'][atoken_start:atoken_end] != atoken_txt:
-                            print(s['text'][atoken_start:atoken_end])
-                            print(atoken_txt)
-                            print('=======================')
-#                         assert s['text'][atoken_start:atoken_end] == atoken_txt, 'atoken snt position error!'
+                        if DEBUG > 0:
+                            if s['text'][atoken_start:atoken_end] != atoken_txt:
+                                print(s['text'][atoken_start:atoken_end])
+                                print(atoken_txt)
+                                print('=======================')
+    #                         assert s['text'][atoken_start:atoken_end] == atoken_txt, 'atoken snt position error!'
                         atokens.append((atoken_start, atoken_end))
                     
             # ner 
@@ -119,9 +119,8 @@ class SerSentenceDataset(Dataset):
                                        'char_b': ne['char_b'] + q_sent['start'],
                                        'char_e': ne['char_e'] + q_sent['start']})
             q_ne, q_string_pieces = SerSentenceDataset.get_ne(q_ner_list, q['QTEXT_CN'])
-
             s_ne, s_string_pieces = SerSentenceDataset.get_ne(s['IE']['NER'], s['text'], atokens)
-
+            
             other_context = ""
             context_sents = []
             for context_i, context_s in enumerate(d['SENTS']):
@@ -131,7 +130,7 @@ class SerSentenceDataset(Dataset):
 
             if 'ATYPE' in q.keys():
                 atype = get_atype(q['ATYPE'])
-                assert atype in ATYPE_LIST
+                assert atype in ATYPE_LIST                
             else:
                 atype = 'Misc'
             out = {'QID': q['QID'], 'QTEXT': q['QTEXT_CN'], 'sentence': s['text'],
@@ -153,10 +152,18 @@ class SerSentenceDataset(Dataset):
                         out['label'] = -1
                     else:
                         out['label'] = 0
+                        if is_down_sample:
+                            is_delete = False
+                            for s_etype in s_ne.values():
+                                if SentIdx.is_matched_atype_etype(atype, s_etype):
+                                    is_delete = True
+                                    break
+                            if is_delete:
+                                continue
 
             yield out
 
-    def __init__(self, documents, transform=None, indexer=None, is_hinge=False, is_score=False):
+    def __init__(self, documents, transform=None, indexer=None, is_down_sample=False, is_hinge=False, is_score=False):
         instances = []
         get_answer_sp(documents)
 
@@ -166,7 +173,7 @@ class SerSentenceDataset(Dataset):
                     continue
                 if not q['SHINT_']:
                     continue
-                for instance in self.get_items_in_q(q, d, is_training=True, is_hinge=is_hinge, is_score=is_score):
+                for instance in self.get_items_in_q(q, d, is_down_sample=is_down_sample, is_training=True, is_hinge=is_hinge, is_score=is_score):
                     if indexer:
                         instance = indexer(instance)
                     instances.append(instance)
@@ -239,9 +246,9 @@ class SentIdx:
 
             if idx in ne.keys():
                 etype = ne[idx]
-                out_etype += [ETYPE2id[etype]] * len(tokenized_p)
+                out_etype += [etype] * len(tokenized_p)
             else:
-                out_etype += [ETYPE2id['O']] * len(tokenized_p)
+                out_etype += ['O'] * len(tokenized_p)
         return out_tokenized, out_etype
 
     @staticmethod
@@ -298,10 +305,10 @@ class SentIdx:
                 if bound[0] <= asim_score < bound[1]:
                     qsim_a[i] = level
                     
-            if id2ETYPE[etype_a[i]] != 'O':
-                amatch_type_a[i] = self.get_amatch_type(atype, id2ETYPE[etype_a[i]])
+            if etype_a[i] != 'O':
+                amatch_type_a[i] = self.get_amatch_type(atype, etype_a[i])
             
-            if self.is_matched_atype_etype(atype, id2ETYPE[etype_a[i]]):
+            if self.is_matched_atype_etype(atype, etype_a[i]):
                 atype_ent_match_a[i] = 1
 
         return tf_match_a, idf_match_a, sf_type_a, qsim_a, atype_ent_match_a, sf_score_a, amatch_type_a
@@ -337,9 +344,9 @@ class SentIdx:
                                context_tokenized_sents, context_sents_num, atype)
 
         tokenized_q = ['[CLS]'] + tokenized_q + ['[SEP]']
-        etype_q = [ETYPE2id['O']] + etype_q + [ETYPE2id['O']]
+        etype_id_q = [ETYPE2id['O']] + [ETYPE2id[etype] for etype in etype_q] + [ETYPE2id['O']]
         tokenized_all = tokenized_q + tokenized_s
-        etype_all = etype_q + etype_s
+        etype_id_all = etype_id_q + [ETYPE2id[etype] if etype in ETYPE2id else 0 for etype in etype_s]
         tf_match = [0] + tf_match_q + [0] + tf_match_s
         idf_match = [0] + idf_match_q + [0] + idf_match_s
         sf_type = [self.sf_level - 1] + sf_type_q + [self.sf_level - 1] + sf_type_s
@@ -356,7 +363,7 @@ class SentIdx:
             idf_match = idf_match[:511]
             sf_type = sf_type[:511]
             qsim_type = qsim_type[:511]
-            etype_all = etype_all[:511]
+            etype_id_all = etype_id_all[:511]
             atype_ent_match = atype_ent_match[:511]
             sf_score_all = sf_score_all[:511]
             amatch_type = amatch_type[:511]
@@ -366,11 +373,11 @@ class SentIdx:
                 print("tokenized q > 511 id:{}".format(sample['QID']))
             tokenized_q = tokenized_q[:511]
             tokenized_q += ['[SEP]']
-            etype_q = etype_q[:511]
-            etype_q += [ETYPE2id['O']]
+            etype_id_q = etype_id_q[:511]
+            etype_id_q += [ETYPE2id['O']]
 
         tokenized_all += ['[SEP]']
-        etype_all += [ETYPE2id['O']]
+        etype_id_all += [ETYPE2id['O']]
         tf_match += [0]
         idf_match += [0]
         sf_type += [self.sf_level - 1]
@@ -382,8 +389,9 @@ class SentIdx:
         ids_all = self.tokenizer.convert_tokens_to_ids(tokenized_all)
         ids_q = self.tokenizer.convert_tokens_to_ids(tokenized_q)
         if not ids_all:
-            print(ids_all)
-            print(sample)
+            if DEBUG > 0:
+                print(ids_all)
+                print(sample)
 
         sample['input_ids'] = ids_all
         sample['question_ids'] = ids_q
@@ -393,7 +401,7 @@ class SentIdx:
         sample['idf_match'] = idf_match
         sample['sf_type'] = sf_type
         sample['qsim_type'] = qsim_type
-        sample['etype_ids'] = etype_all
+        sample['etype_ids'] = etype_id_all
         sample['atype_label'] = atype_label
         sample['atype_ent_match'] = atype_ent_match
         sample['sf_score'] = sf_score_all

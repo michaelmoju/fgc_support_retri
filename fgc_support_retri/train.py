@@ -7,6 +7,7 @@ from transformers.tokenization_bert import BertTokenizer
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
 
 from . import config
+from . import fgc_config
 from .utils import json_load
 from .dataset_reader.advance_sentence_reader import *
 from .dataset_reader.sentence_reader import *
@@ -133,7 +134,7 @@ class SER_Trainer:
                 atype_golds.append(q['ATYPE_'])
         
         print('train_set indexing...')
-        train_set = self.dataset_reader(train_documents, indexer=self.indexer, is_hinge=self.is_hinge,
+        train_set = self.dataset_reader(train_documents, indexer=self.indexer, is_down_sample=fgc_config.IS_DOWN_SAMPLE, is_hinge=self.is_hinge,
                                        is_score=is_score)
         print('loader...')
         dataloader_train = DataLoader(train_set, batch_size=batch_size, shuffle=True, collate_fn=self.collate_fn,
